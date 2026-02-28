@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.log
+.env
+
+# Virtual environment
+venv/
+.env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.env
+docker-compose.override.yml
+
+# Pytest / coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Migrations cache
+alembic/versions/__pycache__/
+
+# Node (si tu ajoutes frontend plus tard)
+node_modules/
+dist/
+build/
