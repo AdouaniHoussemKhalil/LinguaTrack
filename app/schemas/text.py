@@ -1,15 +1,20 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from uuid import UUID
 from typing import Optional
 from app.models.enums import CorrectionMode, LanguageLevel
 from typing import List
-from sqlalchemy import DateTime
+from datetime import datetime
 
 
 
 class TextAnalyzeRequest(BaseModel):
     text: str
     mode: CorrectionMode = CorrectionMode.correction
+    target_level: Optional[LanguageLevel] = None
+
+class TextAnalyzeRequestManyModes(BaseModel):
+    text: str
+    modes: List[CorrectionMode]
     target_level: Optional[LanguageLevel] = None
 
 class ErrorResponse(BaseModel):
@@ -32,11 +37,10 @@ class TextResponse(BaseModel):
     target_level: Optional[LanguageLevel]
     score: Optional[float]
     processing_time: Optional[float]
-    created_at: DateTime
+    created_at: datetime
     errors: List[ErrorResponse] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TextListResponse(BaseModel):
