@@ -12,5 +12,5 @@ class User(Base):
     password = Column(String, nullable=False)
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False)
-    level = Column(String, default="A2")  # estimation CECRL
+    level = Column(String, default="A2") 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

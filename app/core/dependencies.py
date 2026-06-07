@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from app.core.config import SECRET_KEY, ALGORITHM
 from app.core.database import get_db
 from app.models.user import User
+from uuid import UUID
+
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="users/login")
 
@@ -26,7 +28,7 @@ def get_current_user(
     except JWTError:
         raise credentials_exception
 
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.id == UUID(user_id)).first()
     if user is None:
         raise credentials_exception
 
