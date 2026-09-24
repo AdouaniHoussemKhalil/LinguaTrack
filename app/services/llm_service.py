@@ -1,14 +1,14 @@
-import os
 import json
 import re
 from mistralai import Mistral
+from app.core.config import settings
 
 MODEL = "mistral-medium-latest"
 
 
 def generate_analysis(text: str, mode: str, target_level: str):
 
-    api_key = os.getenv("MISTRAL_API_KEY")
+    api_key = settings.MISTRAL_API_KEY
     if not api_key:
         raise ValueError("MISTRAL_API_KEY not set in environment variables")
 
