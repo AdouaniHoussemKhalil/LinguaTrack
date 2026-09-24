@@ -1,13 +1,12 @@
-
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.core.database import get_db
+from app.core.dependencies import get_current_user
 from app.core.security import create_access_token
-from app.schemas.user import LoginRequest, TokenResponse, UserCreate, UserResponse
-from app.services.user_service import authenticate_user, create_user, get_user_by_id, login_user
-from uuid import UUID
+from app.models.user import User
+from app.schemas.user import LoginRequest, UserCreate, UserResponse
+from app.services.user_service import authenticate_user, create_user
 
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -22,12 +21,10 @@ def create_new_user(user: UserCreate, db: Session = Depends(get_db)):
     access_token = create_access_token(data={"sub": str(created_user.id)})
     return {"user_id": created_user.id,"access_token": access_token, "is_success": True, "error": None}
 
-@router.get("/{user_id}", response_model=UserResponse)
-def get_user(user_id: UUID , db: Session = Depends(get_db)):
-    user = get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
+@router.get("/me", response_model=UserResponse)
+def get_me(current_user: User = Depends(get_current_user)):
+    """Profil de l'utilisateur connecté (remplace GET /users/{user_id}, accessible sans authentification)."""
+    return current_user
 
 @router.post("/login")
 def login(
