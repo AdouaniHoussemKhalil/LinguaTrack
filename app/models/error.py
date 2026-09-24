@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, Integer, String, ForeignKey, Text
+from sqlalchemy import Column, DateTime, Integer, String, ForeignKey, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -21,4 +21,6 @@ class Error(Base):
     position_start = Column(Integer, nullable=True)
     position_end = Column(Integer, nullable=True)
 
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
     text = relationship("TextSubmission", back_populates="errors")

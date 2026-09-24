@@ -2,19 +2,28 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 import os
 
-# URL de connexion PostgreSQL (ajuste selon ton docker-compose)
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://postgres:postgres@db:5432/linguatrack")
+DATABASE_URL = os.getenv("DATABASE_URL") or "sqlite:///./linguatrack.db"
 
-engine = create_engine(DATABASE_URL, echo=True)
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable is not set")
 
-# Session factory
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+if DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={"check_same_thread": False}
+    )
+else:
+    engine = create_engine(DATABASE_URL, echo=True)
 
-# Base pour déclarer les models
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
+
 Base = declarative_base()
 
 
-# Dépendance FastAPI pour injecter la session DB
 def get_db():
     db = SessionLocal()
     try:

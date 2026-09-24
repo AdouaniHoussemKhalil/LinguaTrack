@@ -1,12 +1,11 @@
-
 services:
   api:
     build: .
     container_name: linguatrack_api
     ports:
       - "8000:8000"
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/linguatrack
+    env_file:
+      - .env
     depends_on:
       - db
 

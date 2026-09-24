@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from uuid import UUID
 from datetime import datetime
 from typing import Optional
@@ -8,24 +8,26 @@ from app.models.enums import LanguageLevel
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
-    first_name: str
-    last_name: str
+    firstName: str
+    lastName: str
 
 
 class UserResponse(BaseModel):
     id: UUID
     email: EmailStr
-    first_name: str
-    last_name: str
+    firstName: str = Field(alias="first_name")
+    lastName: str = Field(alias="last_name")
     level: Optional[LanguageLevel]
     created_at: datetime
 
-    class Config:
-        from_attributes = True  # SQLAlchemy compatibility
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True
+    )
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    username: EmailStr
     password: str
 
 
