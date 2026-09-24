@@ -1,3 +1,4 @@
+import logging
 import time
 import uuid
 from uuid import UUID
@@ -9,6 +10,8 @@ from app.models.text import TextSubmission
 from app.models.error import Error
 from app.schemas.text import TextAnalyzeRequest
 from app.services.llm_service import generate_analysis
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -35,27 +38,6 @@ def _normalize_note(metric_name: str, change: Optional[float], period_label: str
 
     prefix = "+" if change >= 0 else ""
     return f"this {period_label} {prefix}{change:.1f}%"
-
-
-def _build_period_filters(user_id: UUID, period: str, now: datetime):
-    current_filters = [TextSubmission.user_id == user_id]
-    previous_filters = None
-    period_label = "period"
-
-    if period == "last_week":
-        current_filters.append(TextSubmission.created_at >= now - timedelta(days=7))
-        previous_filters = [TextSubmission.user_id == user_id,
-                            TextSubmission.created_at >= now - timedelta(days=14),
-                            TextSubmission.created_at < now - timedelta(days=7)]
-        period_label = "week"
-    elif period == "last_month":
-        current_filters.append(TextSubmission.created_at >= now - timedelta(days=30))
-        previous_filters = [TextSubmission.user_id == user_id,
-                            TextSubmission.created_at >= now - timedelta(days=60),
-                            TextSubmission.created_at < now - timedelta(days=30)]
-        period_label = "month"
-
-    return current_filters, previous_filters, period_label
 
 
 def _build_period_filters_v2(user_id: UUID, period: str, now: datetime):
@@ -120,7 +102,7 @@ def _build_period_filters_v2(user_id: UUID, period: str, now: datetime):
 
 def get_user_dashboard_stats(db: Session, user_id: UUID, period: str = "all"):
     now = datetime.now(timezone.utc)
-    current_filters, previous_filters, period_label = _build_period_filters(
+    current_filters, previous_filters, period_label = _build_period_filters_v2(
         user_id,
         period,
         now
@@ -305,50 +287,48 @@ def get_user_dashboard_stats(db: Session, user_id: UUID, period: str = "all"):
     }
 
 
-def analyze_text(db: Session, user_id, data: TextAnalyzeRequest, base_request_id=None):
+def analyze_text(db: Session, user_id, data: TextAnalyzeRequest, default_level: Optional[str] = None):
+    """Analyse un texte avec le LLM et l'enregistre avec ses erreurs en une seule transaction.
+
+    Le niveau cible est celui de la requête, sinon celui de l'utilisateur (`default_level`).
+    Lève `LLMError` si l'analyse échoue : rien n'est alors enregistré.
+    """
     start = time.time()
+    target_level = data.target_level.value if data.target_level else default_level
 
     llm_result = generate_analysis(
         text=data.text,
-        mode=data.mode,
-        target_level=data.target_level
+        mode=data.mode.value,
+        target_level=target_level
     )
-
-    print("=== LLM RESULT ===")
-    print(llm_result)
+    logger.debug("Analyse LLM : score=%s, %s erreur(s)", llm_result["score"], len(llm_result["grammar_errors"]))
 
     text_entry = TextSubmission(
         id=uuid.uuid4(),
         user_id=user_id,
         original_text=data.text,
         corrected_text=llm_result["corrected_text"],
-        mode=data.mode,
-        target_level=data.target_level,
+        mode=data.mode.value,
+        target_level=target_level,
         score=llm_result["score"],
         processing_time=time.time() - start,
     )
+    text_entry.errors = [
+        Error(
+            id=uuid.uuid4(),
+            error_type=e["error_type"],
+            severity=e["severity"],
+            original_fragment=e["original"],
+            corrected_fragment=e["corrected"],
+            explanation=e["explanation"],
+            position_start=e["position_start"],
+            position_end=e["position_end"],
+        )
+        for e in llm_result["grammar_errors"]
+    ]
 
     db.add(text_entry)
     db.commit()
     db.refresh(text_entry)
 
-    errors_to_add = []
-    for e in llm_result.get("grammar_errors", []):
-        error_entry = Error(
-            id=uuid.uuid4(),
-            text_id=text_entry.id,
-            error_type=e.get("error_type", "grammar"),  # par défaut grammar
-            severity=e.get("severity"),  # peut être None
-            original_fragment=e.get("original", ""),
-            corrected_fragment=e.get("corrected", ""),
-            explanation=e.get("explanation", ""),
-            position_start=e.get("position_start"),
-            position_end=e.get("position_end")
-        )
-        errors_to_add.append(error_entry)
-
-    if errors_to_add:
-        db.add_all(errors_to_add)
-        db.commit()
-        
     return text_entry

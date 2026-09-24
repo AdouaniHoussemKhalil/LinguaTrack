@@ -26,7 +26,7 @@ def create_user(db: Session, user_data: UserCreate):
         password=hashed_pwd,
         first_name=user_data.firstName,
         last_name=user_data.lastName,
-        level="A2"
+        level=user_data.level.value
     )
 
     db.add(user)

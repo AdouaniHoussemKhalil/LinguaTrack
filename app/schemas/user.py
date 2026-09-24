@@ -10,6 +10,7 @@ class UserCreate(BaseModel):
     password: str
     firstName: str
     lastName: str
+    level: LanguageLevel = LanguageLevel.A2
 
 
 class UserResponse(BaseModel):

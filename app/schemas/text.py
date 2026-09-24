@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from uuid import UUID
 from typing import Optional, Dict
 from app.models.enums import CorrectionMode, LanguageLevel
@@ -9,10 +9,21 @@ from enum import Enum
 
 
 
+# Aligné sur la limite du front (et sur la taille de réponse du LLM)
+MAX_TEXT_LENGTH = 5000
+
+
 class TextAnalyzeRequest(BaseModel):
-    text: str
+    text: str = Field(min_length=1, max_length=MAX_TEXT_LENGTH)
     mode: CorrectionMode = CorrectionMode.correction
     target_level: Optional[LanguageLevel] = None
+
+    @field_validator("text")
+    @classmethod
+    def text_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Le texte à analyser est vide")
+        return value
 
 class TextAnalyzeRequestManyModes(BaseModel):
     text: str
