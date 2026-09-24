@@ -11,8 +11,6 @@ class TextSubmission(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
 
-    base_request_id = Column(UUID(as_uuid=True), nullable=True) 
-
     original_text = Column(Text, nullable=False)
     corrected_text = Column(Text, nullable=False)
 

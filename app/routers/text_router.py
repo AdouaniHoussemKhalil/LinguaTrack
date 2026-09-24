@@ -6,8 +6,16 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.enums import CorrectionMode
 from app.models.text import TextSubmission
-from app.schemas.text import TextAnalyzeRequest, TextAnalyzeRequestManyModes, TextResponse
-from app.services.text_service import analyze_text, get_user_text, get_user_texts
+from app.schemas.text import (
+    TextAnalyzeRequest,
+    TextAnalyzeRequestManyModes,
+    TextResponse,
+    DashboardStatsResponse,
+    DashboardPeriod,
+    GetHistoryRequest
+)
+from datetime import datetime, timedelta, timezone
+from app.services.text_service import analyze_text, get_user_text, get_user_texts, get_user_dashboard_stats, _build_period_filters_v2
 
 router = APIRouter(prefix="/texts", tags=["Texts"])
 
@@ -27,10 +35,17 @@ def get_modes():
 
 @router.get("/history", response_model=List[TextResponse])
 def get_history(
+    req: GetHistoryRequest =  Depends(),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    return db.query(TextSubmission).filter(TextSubmission.user_id == current_user.id).all()
+    now = datetime.now(timezone.utc)
+    current_filters, previous_filters, period_label = _build_period_filters_v2(
+        current_user.id,
+        req.period,
+        now
+    )
+    return db.query(TextSubmission).filter(*current_filters).order_by(TextSubmission.created_at.desc()).all()
 
 @router.get("/history/{user_id}/{text_id}", response_model=TextResponse)
 def get_text_entry(user_id: str, text_id: str, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
@@ -42,3 +57,12 @@ def get_text_entry(user_id: str, text_id: str, db: Session = Depends(get_db), cu
     if not entry:
         raise HTTPException(status_code=404, detail="Text entry not found")
     return entry
+
+
+@router.get("/dashboard", response_model=DashboardStatsResponse)
+def get_dashboard(
+    period: DashboardPeriod = DashboardPeriod.all,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    return get_user_dashboard_stats(db, current_user.id, period.value)

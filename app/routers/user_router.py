@@ -19,7 +19,8 @@ def create_new_user(user: UserCreate, db: Session = Depends(get_db)):
     if not is_success:
         return {"is_success": False, "error": error}
     
-    return {"created_user": created_user, "is_success": True, "error": None}
+    access_token = create_access_token(data={"sub": str(created_user.id)})
+    return {"user_id": created_user.id,"access_token": access_token, "is_success": True, "error": None}
 
 @router.get("/{user_id}", response_model=UserResponse)
 def get_user(user_id: UUID , db: Session = Depends(get_db)):
@@ -37,5 +38,17 @@ def login(
     if not is_success:
         return {"is_success": False, "error": error}
     access_token = create_access_token(data={"sub": str(user.id)})
+    return {"user_id":user.id ,"access_token": access_token, "token_type": "bearer", "is_success": True, "error": None}
+
+
+
+@router.post("/token")
+def login_oauth(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+    (user, is_success, error) = authenticate_user(db, form_data.username, form_data.password)
+    if not is_success:
+        return {"is_success": False, "error": error}
+    access_token = create_access_token(data={"sub": str(user.id)})
     return {"access_token": access_token, "token_type": "bearer", "is_success": True, "error": None}
-    

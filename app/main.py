@@ -4,6 +4,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.core.database import Base, engine
+
 
 # ------------------------------
 # CONFIGURATION DES LOGS
@@ -25,10 +27,21 @@ try:
 except Exception as e:
     logger.error(f"Error loading .env: {e}")
 
+
+
 # ------------------------------
 # CRÉATION DE L'APP FASTAPI
 # ------------------------------
 app = FastAPI()
+
+
+# ------------------------------
+# Database
+#-------------------------------
+
+@app.on_event("startup")
+def startup():
+    Base.metadata.create_all(bind=engine)
 
 # ------------------------------
 # CONFIGURATION CORS

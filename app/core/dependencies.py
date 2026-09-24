@@ -8,8 +8,7 @@ from app.models.user import User
 from uuid import UUID
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="users/login")
-
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="users/token")
 
 def get_current_user(
     token: str = Depends(oauth2_scheme),
