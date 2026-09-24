@@ -15,6 +15,7 @@ from app.schemas.text import (
     GetHistoryRequest
 )
 from datetime import datetime, timedelta, timezone
+from app.services.llm_service import LLMError
 from app.services.text_service import analyze_text, get_user_text, get_user_texts, get_user_dashboard_stats, _build_period_filters_v2
 
 router = APIRouter(prefix="/texts", tags=["Texts"])
@@ -26,7 +27,11 @@ def analyze(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    return analyze_text(db, current_user.id, data)
+    try:
+        return analyze_text(db, current_user.id, data, default_level=current_user.level)
+    except LLMError as exc:
+        # 502 : l'échec vient du service d'analyse externe, pas de la requête
+        raise HTTPException(status_code=502, detail=str(exc))
 
 
 @router.get("/modes", response_model=List[str])
@@ -48,14 +53,13 @@ def get_history(
     return db.query(TextSubmission).filter(*current_filters).order_by(TextSubmission.created_at.desc()).all()
 
 @router.get("/history/{user_id}/{text_id}", response_model=TextResponse)
-def get_text_entry(user_id: str, text_id: str, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    user_id_uuid = UUID(user_id)
-    text_id_uuid = UUID(text_id)
-    if(current_user.id != user_id_uuid):
-        raise HTTPException(status_code=403, detail="Forbidden")
-    entry = get_user_text(db, user_id_uuid, text_id_uuid)
+def get_text_entry(user_id: UUID, text_id: UUID, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    # UUID typés : un identifiant mal formé donne 422 au lieu d'un 500
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Accès refusé")
+    entry = get_user_text(db, user_id, text_id)
     if not entry:
-        raise HTTPException(status_code=404, detail="Text entry not found")
+        raise HTTPException(status_code=404, detail="Texte introuvable")
     return entry
 
 
