@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     # Optionnelle au démarrage : vérifiée au moment de l'appel au LLM
     MISTRAL_API_KEY: Optional[str] = None
 
+    # Repli quand Mistral échoue ; sans clé, pas de repli
+    ANTHROPIC_API_KEY: Optional[str] = None
+    ANTHROPIC_MODEL: str = "claude-opus-5"
+
     # Origines autorisées par CORS, séparées par des virgules
     CORS_ORIGINS: str = "http://localhost:5173"
 

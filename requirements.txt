@@ -23,3 +23,4 @@ python-multipart==0.0.9
 
 # LLM : version épinglée et testée (la 2.x ne s'installe pas sous Windows : chemins de fichiers trop longs)
 mistralai==1.12.4
+anthropic==1.8.0
