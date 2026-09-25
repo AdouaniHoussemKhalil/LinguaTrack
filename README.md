@@ -52,8 +52,9 @@ uvicorn app.main:app --reload --port 8000
 
 > Si Windows ne trouve pas `uvicorn`, lancez `python -m uvicorn app.main:app --reload --port 8000`.
 
-Les tables sont créées automatiquement au démarrage. Sans `DATABASE_URL`, la base est un fichier SQLite
-`linguatrack.db` à la racine du dossier (ignoré par Git).
+Le schéma de la base est créé et mis à jour automatiquement au démarrage (migrations Alembic, voir
+[Migrations](#migrations-de-la-base)). Sans `DATABASE_URL`, la base est un fichier SQLite `linguatrack.db`
+à la racine du dossier (ignoré par Git).
 
 Pour générer une `SECRET_KEY` :
 
@@ -112,13 +113,15 @@ jamais copiés dans l'image.
 ## Architecture
 
 ```
+alembic/               # migrations de la base (versions/)
 app/
-├── main.py            # création de l'app, CORS, création des tables, routers
+├── main.py            # création de l'app, CORS, migrations au démarrage, routers
 ├── core/
 │   ├── config.py      # Settings (pydantic-settings), validés au démarrage
 │   ├── database.py    # engine SQLAlchemy, get_db()
 │   ├── security.py    # hachage bcrypt, création des JWT
-│   └── dependencies.py# get_current_user() : utilisateur du token
+│   ├── dependencies.py# get_current_user() : utilisateur du token
+│   └── migrations.py  # applique les migrations Alembic au démarrage
 ├── models/            # tables SQLAlchemy + enums (modes, niveaux, sévérités)
 ├── schemas/           # modèles Pydantic des requêtes et réponses
 ├── routers/           # health, users, texts : minces, ils délèguent aux services
@@ -142,8 +145,25 @@ app/
 | `errors` | erreurs d'un texte : type, sévérité, fragment original, correction, explication |
 | `user_error_stats` | prévue pour des statistiques par type d'erreur, **pas encore alimentée** |
 
-Il n'y a pas encore de migrations : les tables sont créées au démarrage (`create_all`), mais une colonne
-ajoutée à un modèle n'est **pas** ajoutée à une table existante.
+### Migrations de la base
+
+Le schéma est géré par [Alembic](https://alembic.sqlalchemy.org) (dossier `alembic/versions/`).
+**Au démarrage, l'API applique toutes les migrations en attente** : rien à lancer à la main.
+Une base créée avant l'arrivée d'Alembic (tables présentes, sans table `alembic_version`) est d'abord
+marquée comme étant à la migration initiale : ses tables et ses données sont conservées.
+
+Après une modification d'un modèle (`app/models/`), créer la migration correspondante :
+
+```bash
+alembic revision --autogenerate -m "ajouter la colonne feedback"
+# relire le fichier généré dans alembic/versions/, puis :
+alembic upgrade head          # ou simplement redémarrer l'API
+```
+
+Autres commandes utiles : `alembic current` (révision de la base), `alembic history`,
+`alembic downgrade -1` (annuler la dernière migration), `alembic check` (modèles et base alignés ?).
+Alembic utilise la même `DATABASE_URL` que l'API. Sous SQLite, les modifications de colonnes passent
+par le mode *batch* (recréation de la table), géré automatiquement.
 
 ---
 
@@ -304,11 +324,10 @@ Claude Pro). Sortie structurée par schéma JSON, et repli côté serveur si le 
 
 ## Limites connues et prochaines étapes
 
-- **Pas de migrations** (Alembic) : prérequis pour faire évoluer le schéma de la base.
 - **Le `feedback` global du modèle n'est pas enregistré** ; `user_error_stats` n'est pas alimentée.
 - **Le mode est transmis au modèle par son seul nom** (`professional`, `simple`…), sans consigne détaillée.
 - **Pas encore de tests** dans le dépôt.
-- `on_event` (FastAPI) et `datetime.utcnow` sont dépréciés.
+- `datetime.utcnow` est déprécié.
 - Les « exercices personnalisés » évoqués au début du projet ne sont pas implémentés.
 
 ---
