@@ -1,0 +1,9 @@
+# Ne jamais embarquer les secrets ni la base locale dans l'image
+.env
+app/.env
+*.db
+.git
+.venv
+venv
+__pycache__
+*.pyc
