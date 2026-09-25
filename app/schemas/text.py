@@ -49,6 +49,7 @@ class TextResponse(BaseModel):
     mode: CorrectionMode
     target_level: Optional[LanguageLevel]
     score: Optional[float]
+    feedback: Optional[str] = None
     processing_time: Optional[float]
     created_at: datetime
     errors: List[ErrorResponse] = []

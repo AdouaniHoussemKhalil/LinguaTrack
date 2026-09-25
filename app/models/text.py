@@ -18,6 +18,7 @@ class TextSubmission(Base):
     target_level = Column(String, nullable=True)
 
     score = Column(Float, nullable=True)  # ex: 78.5 / 100
+    feedback = Column(Text, nullable=True)  # appréciation globale du LLM (NULL pour les textes antérieurs)
     processing_time = Column(Float, nullable=True)  # en secondes
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
