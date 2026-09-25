@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+import unicodedata
 from typing import Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -141,6 +142,19 @@ def parse_json(content: Any) -> dict:
         raise LLMError("Le service d'analyse a renvoyé une réponse inattendue. Réessayez.") from exc
 
 
+def _as_text(value: Any) -> str:
+    """Texte lisible même si le modèle renvoie un objet ou une liste (ex. {"global": …, "suggestions": […]})."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        value = list(value.values())
+    if isinstance(value, (list, tuple)):
+        return "\n".join(part for part in (_as_text(v) for v in value) if part)
+    return str(value)
+
+
 def normalize_analysis(raw: dict) -> dict:
     """Valide et nettoie la réponse du LLM (types d'erreurs imposés, sévérité, score borné)."""
 
@@ -172,6 +186,63 @@ def normalize_analysis(raw: dict) -> dict:
     return {
         "corrected_text": corrected_text,
         "score": score,
-        "feedback": str(raw.get("feedback") or ""),
+        "feedback": _as_text(raw.get("feedback")),
         "grammar_errors": errors,
     }
+
+
+# Corrections renvoyées à la place d'un vrai fragment corrigé (observé sur les petits modèles)
+PLACEHOLDER_CORRECTIONS = {"correct", "correcte", "ok", "aucune", "aucun", "rien", "none", "n/a", "-", "..."}
+
+
+# Variantes typographiques que les modèles substituent sans que ce soit une correction
+TYPOGRAPHY = str.maketrans({
+    "’": "'", "‘": "'", "ʼ": "'",   # apostrophes courbes → droite
+    "“": '"', "”": '"', "«": '"', "»": '"',  # guillemets
+    " ": " ", " ": " ",                  # espaces insécables (avant ; : ! ?)
+})
+
+
+def _normalize(value: str) -> str:
+    """Forme de comparaison : insensible à la casse, aux espaces et à la typographie."""
+    value = unicodedata.normalize("NFC", value).translate(TYPOGRAPHY).casefold()
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def drop_incoherent(raw: dict, source_text: str) -> dict:
+    """Écarte ce qu'un modèle produit d'incohérent, sans rien inventer à sa place (tous fournisseurs).
+
+    - erreur retenue seulement si le fragment original figure dans le texte soumis
+      et que la correction est réelle (non vide, différente, pas « correct ») ;
+    - score ignoré (None) s'il annonce 100 alors qu'il liste des erreurs : l'interface
+      affiche alors « – » au lieu d'un score faux. Un texte corrigé différent ne suffit
+      pas : les modes de réécriture (professionnel, simple…) le modifient par principe.
+    """
+    source = _normalize(source_text)
+    kept, dropped = [], 0
+
+    for error in raw.get("grammar_errors") or []:
+        if not isinstance(error, dict):
+            dropped += 1
+            continue
+        original = _normalize(str(error.get("original") or ""))
+        corrected = _normalize(str(error.get("corrected") or ""))
+        if not original or original not in source or not corrected or corrected == original or corrected in PLACEHOLDER_CORRECTIONS:
+            dropped += 1
+            continue
+        kept.append(error)
+
+    if dropped:
+        logger.info("%s erreur(s) incohérente(s) écartée(s) sur %s", dropped, dropped + len(kept))
+
+    cleaned = {**raw, "grammar_errors": kept}
+
+    try:
+        score = float(raw.get("score"))
+    except (TypeError, ValueError):
+        score = None
+    if score is not None and score >= 100 and kept:
+        logger.info("Score 100 contradictoire ignoré")
+        cleaned["score"] = None
+
+    return cleaned
