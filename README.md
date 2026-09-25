@@ -177,6 +177,8 @@ Documentation complète et testable : **http://localhost:8000/docs**.
 | `POST` | `/users/login` | — | Connexion (`username` = email, `password`) |
 | `POST` | `/users/token` | — | Connexion au format OAuth2 (bouton *Authorize* de Swagger) |
 | `GET` | `/users/me` | ✅ | Profil de l'utilisateur connecté |
+| `PATCH` | `/users/me` | ✅ | Modifier prénom, nom, niveau (`firstName`, `lastName`, `level`, tous facultatifs) |
+| `PUT` | `/users/me/password` | ✅ | Changer de mot de passe (`current_password`, `new_password`) ; 204 |
 | `POST` | `/texts/analyze` | ✅ | Analyse d'un texte (`text` ≤ 5 000 caractères, `mode`, `target_level` facultatif) |
 | `GET` | `/texts/modes` | — | Modes disponibles |
 | `GET` | `/texts/history?period=` | ✅ | Textes analysés sur la période |
@@ -190,6 +192,7 @@ Documentation complète et testable : **http://localhost:8000/docs**.
 - **Modes :** `correction`, `professional`, `simple`, `natural`, `persuasive`.
 - **Convention :** `/users/register` et `/users/login` répondent toujours HTTP 200 au format
   `{is_success, error, access_token, user_id}` ; le front s'appuie sur ce format.
+- **Mot de passe :** au moins 8 caractères, une minuscule, une majuscule et un chiffre (même règle que le front).
 - **Erreurs :** 401 (token absent ou expiré), 403 (texte d'un autre utilisateur), 404, 422 (requête invalide),
   **502 si l'IA n'a pas pu analyser le texte** (message en français dans `detail`).
 
