@@ -6,13 +6,12 @@ Particularités gérées ici, observées sur deepseek-r1:1.5b :
 - sans contrainte, le JSON est entouré de ```json et contient des champs inventés :
   la sortie est donc contrainte par le schéma JSON (paramètre `format`) ;
 - qualité limitée (1,5 milliard de paramètres) : erreurs incohérentes et score
-  contradictoire, filtrés par `clean_small_model_output` ;
+  contradictoire, filtrés pour tous les fournisseurs par `llm_common.drop_incoherent` ;
 - lent sur CPU (souvent 50 à 100 s) : délai dédié, OLLAMA_TIMEOUT.
 """
 
 import logging
 import re
-import unicodedata
 
 import httpx
 from app.core.config import settings
@@ -26,9 +25,6 @@ MAX_OUTPUT_TOKENS = 4096
 
 UNAVAILABLE = "Le service d'analyse est momentanément indisponible. Réessayez dans quelques instants."
 
-# Corrections que le petit modèle renvoie à la place d'un vrai fragment corrigé
-PLACEHOLDER_CORRECTIONS = {"correct", "correcte", "ok", "aucune", "aucun", "rien", "none", "n/a", "-", "..."}
-
 THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 CODE_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 
@@ -38,7 +34,7 @@ def is_configured() -> bool:
 
 
 def analyze(system_prompt: str, user_prompt: str, source_text: str) -> dict:
-    """Renvoie la réponse du modèle local, nettoyée (à passer à normalize_analysis). Lève LLMError en cas d'échec."""
+    """Renvoie la réponse du modèle local, sans sa réflexion (à passer à normalize_analysis). Lève LLMError en cas d'échec."""
 
     payload = {
         "model": settings.OLLAMA_MODEL,
@@ -80,7 +76,8 @@ def analyze(system_prompt: str, user_prompt: str, source_text: str) -> dict:
 
     content = strip_reasoning((body.get("message") or {}).get("content") or "")
     raw = parse_json(content)
-    return clean_small_model_output(raw, source_text)
+    # Le filtrage des erreurs incohérentes est appliqué à tous les fournisseurs (llm_service)
+    return raw
 
 
 def strip_reasoning(content: str) -> str:
@@ -90,47 +87,3 @@ def strip_reasoning(content: str) -> str:
     if "<think>" in content.lower():
         content = content[content.lower().rfind("</think>") + len("</think>"):] if "</think>" in content.lower() else ""
     return CODE_FENCE.sub("", content.strip()).strip()
-
-
-def _normalize(value: str) -> str:
-    value = unicodedata.normalize("NFC", value).casefold()
-    return re.sub(r"\s+", " ", value).strip()
-
-
-def clean_small_model_output(raw: dict, source_text: str) -> dict:
-    """Écarte ce que le petit modèle produit d'incohérent, sans rien inventer à sa place.
-
-    - erreur retenue seulement si le fragment original figure dans le texte soumis
-      et que la correction est réelle (non vide, différente, pas « correct ») ;
-    - score ignoré (None) s'il annonce 100 alors qu'il reste des erreurs ou que
-      le texte a été modifié : l'interface affiche alors « – » au lieu d'un score faux.
-    """
-    source = _normalize(source_text)
-    kept, dropped = [], 0
-
-    for error in raw.get("grammar_errors") or []:
-        if not isinstance(error, dict):
-            dropped += 1
-            continue
-        original = _normalize(str(error.get("original") or ""))
-        corrected = _normalize(str(error.get("corrected") or ""))
-        if not original or original not in source or not corrected or corrected == original or corrected in PLACEHOLDER_CORRECTIONS:
-            dropped += 1
-            continue
-        kept.append(error)
-
-    if dropped:
-        logger.info("Ollama : %s erreur(s) incohérente(s) écartée(s) sur %s", dropped, dropped + len(kept))
-
-    cleaned = {**raw, "grammar_errors": kept}
-
-    text_changed = _normalize(str(raw.get("corrected_text") or "")) != source
-    try:
-        score = float(raw.get("score"))
-    except (TypeError, ValueError):
-        score = None
-    if score is not None and score >= 100 and (kept or text_changed):
-        logger.info("Ollama : score 100 contradictoire ignoré")
-        cleaned["score"] = None
-
-    return cleaned
