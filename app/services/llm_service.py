@@ -1,9 +1,9 @@
 import logging
-from typing import Optional
+from typing import Callable, Dict, Optional, Tuple
 
 from mistralai import Mistral
 from app.core.config import settings
-from app.services import claude_service
+from app.services import claude_service, ollama_service
 from app.services.llm_common import LLMError, build_prompts, normalize_analysis, parse_json
 
 # Réexportés pour les imports existants (routers, tests)
@@ -15,36 +15,53 @@ MODEL = "mistral-medium-latest"
 # 700 tronquait le JSON sur les textes longs ; 4096 couvre un texte de 5 000 caractères corrigé + ses erreurs
 MAX_OUTPUT_TOKENS = 4096
 
+NOT_CONFIGURED = "Le service d'analyse n'est pas configuré. Réessayez plus tard."
+
 
 def generate_analysis(text: str, mode: str, target_level: Optional[str]) -> dict:
     """Analyse validée (texte corrigé, score 0-100, erreurs normalisées).
 
-    Mistral d'abord ; en cas d'échec (quota, panne, réponse invalide ou tronquée),
-    repli sur Claude si ANTHROPIC_API_KEY est configurée. Lève LLMError si tout échoue.
+    Les fournisseurs de LLM_PROVIDERS (défaut : mistral, ollama, claude) sont essayés
+    dans l'ordre ; un fournisseur non configuré est ignoré, un échec passe au suivant.
+    Lève la dernière LLMError si aucun n'aboutit.
     """
     system_prompt, user_prompt = build_prompts(text, mode, target_level)
+    providers = _providers()
+    last_error: Optional[LLMError] = None
 
-    try:
-        result = _analyze_with_mistral(system_prompt, user_prompt)
-        logger.info("Analyse réalisée par Mistral (%s)", MODEL)
+    for name in settings.llm_providers:
+        if name not in providers:
+            logger.warning("Fournisseur LLM inconnu ignoré : %s", name)
+            continue
+        is_configured, analyze = providers[name]
+        if not is_configured():
+            continue
+        try:
+            result = normalize_analysis(analyze(system_prompt, user_prompt, text))
+        except LLMError as exc:
+            logger.warning("Fournisseur %s en échec (%s) : passage au suivant", name, exc)
+            last_error = exc
+            continue
+        logger.info("Analyse réalisée par %s", name)
         return result
-    except LLMError as mistral_error:
-        if not claude_service.is_configured():
-            raise
-        logger.warning("Mistral en échec (%s) : repli sur Claude", mistral_error)
 
-    result = normalize_analysis(claude_service.analyze(system_prompt, user_prompt))
-    logger.info("Analyse réalisée par Claude (%s)", settings.ANTHROPIC_MODEL)
-    return result
+    if last_error is None:
+        logger.error("Aucun fournisseur LLM configuré (LLM_PROVIDERS=%s)", settings.LLM_PROVIDERS)
+        raise LLMError(NOT_CONFIGURED)
+    raise last_error
 
 
-def _analyze_with_mistral(system_prompt: str, user_prompt: str) -> dict:
-    api_key = settings.MISTRAL_API_KEY
-    if not api_key:
-        logger.error("MISTRAL_API_KEY absente : analyse Mistral impossible")
-        raise LLMError("Le service d'analyse n'est pas configuré. Réessayez plus tard.")
+def _providers() -> Dict[str, Tuple[Callable[[], bool], Callable[[str, str, str], dict]]]:
+    # Résolu à l'appel : les tests peuvent remplacer les fonctions des modules
+    return {
+        "mistral": (lambda: bool(settings.MISTRAL_API_KEY), _analyze_with_mistral),
+        "ollama": (ollama_service.is_configured, ollama_service.analyze),
+        "claude": (claude_service.is_configured, lambda system, user, _text: claude_service.analyze(system, user)),
+    }
 
-    client = Mistral(api_key=api_key)
+
+def _analyze_with_mistral(system_prompt: str, user_prompt: str, _source_text: str = "") -> dict:
+    client = Mistral(api_key=settings.MISTRAL_API_KEY)
 
     try:
         chat_response = client.chat.complete(
@@ -66,4 +83,4 @@ def _analyze_with_mistral(system_prompt: str, user_prompt: str) -> dict:
         logger.warning("Réponse Mistral tronquée (max_tokens=%s)", MAX_OUTPUT_TOKENS)
         raise LLMError("Le texte est trop long pour être analysé en une fois. Essayez de le découper.")
 
-    return normalize_analysis(parse_json(choice.message.content))
+    return parse_json(choice.message.content)

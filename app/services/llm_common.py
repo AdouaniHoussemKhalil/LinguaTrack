@@ -15,6 +15,34 @@ DEFAULT_ERROR_TYPE = "grammaire"
 SEVERITIES = ("low", "medium", "high")
 
 
+# Forme de la réponse demandée aux LLM ; imposée par sortie structurée (Claude, Ollama)
+ANALYSIS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "corrected_text": {"type": "string"},
+        "score": {"type": "integer"},
+        "feedback": {"type": "string"},
+        "grammar_errors": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "original": {"type": "string"},
+                    "corrected": {"type": "string"},
+                    "explanation": {"type": "string"},
+                    "error_type": {"type": "string", "enum": list(ERROR_TYPES)},
+                    "severity": {"type": "string", "enum": list(SEVERITIES)},
+                },
+                "required": ["original", "corrected", "explanation", "error_type", "severity"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["corrected_text", "score", "feedback", "grammar_errors"],
+    "additionalProperties": False,
+}
+
+
 class LLMError(Exception):
     """Échec de l'analyse par le LLM ; le message est destiné à l'utilisateur (en français)."""
 
