@@ -195,8 +195,17 @@ def normalize_analysis(raw: dict) -> dict:
 PLACEHOLDER_CORRECTIONS = {"correct", "correcte", "ok", "aucune", "aucun", "rien", "none", "n/a", "-", "..."}
 
 
+# Variantes typographiques que les modèles substituent sans que ce soit une correction
+TYPOGRAPHY = str.maketrans({
+    "’": "'", "‘": "'", "ʼ": "'",   # apostrophes courbes → droite
+    "“": '"', "”": '"', "«": '"', "»": '"',  # guillemets
+    " ": " ", " ": " ",                  # espaces insécables (avant ; : ! ?)
+})
+
+
 def _normalize(value: str) -> str:
-    value = unicodedata.normalize("NFC", value).casefold()
+    """Forme de comparaison : insensible à la casse, aux espaces et à la typographie."""
+    value = unicodedata.normalize("NFC", value).translate(TYPOGRAPHY).casefold()
     return re.sub(r"\s+", " ", value).strip()
 
 
@@ -205,8 +214,9 @@ def drop_incoherent(raw: dict, source_text: str) -> dict:
 
     - erreur retenue seulement si le fragment original figure dans le texte soumis
       et que la correction est réelle (non vide, différente, pas « correct ») ;
-    - score ignoré (None) s'il annonce 100 alors qu'il reste des erreurs ou que
-      le texte a été modifié : l'interface affiche alors « – » au lieu d'un score faux.
+    - score ignoré (None) s'il annonce 100 alors qu'il liste des erreurs : l'interface
+      affiche alors « – » au lieu d'un score faux. Un texte corrigé différent ne suffit
+      pas : les modes de réécriture (professionnel, simple…) le modifient par principe.
     """
     source = _normalize(source_text)
     kept, dropped = [], 0
@@ -227,12 +237,11 @@ def drop_incoherent(raw: dict, source_text: str) -> dict:
 
     cleaned = {**raw, "grammar_errors": kept}
 
-    text_changed = _normalize(str(raw.get("corrected_text") or "")) != source
     try:
         score = float(raw.get("score"))
     except (TypeError, ValueError):
         score = None
-    if score is not None and score >= 100 and (kept or text_changed):
+    if score is not None and score >= 100 and kept:
         logger.info("Score 100 contradictoire ignoré")
         cleaned["score"] = None
 
