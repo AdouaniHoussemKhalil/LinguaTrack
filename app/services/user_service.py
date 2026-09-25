@@ -6,7 +6,7 @@ import uuid
 
 from sqlalchemy.orm import Session
 from app.models.user import User
-from app.schemas.user import UserCreate
+from app.schemas.user import PasswordChange, UserCreate, UserUpdate
 from app.core.security import create_access_token, hash_password, verify_password
 from uuid import UUID
 
@@ -73,3 +73,27 @@ def login_user(db, email: str, password: str):
     token = create_access_token({"sub": str(user.id)})
 
     return token
+
+
+def update_user(db: Session, user: User, data: UserUpdate) -> User:
+    """Applique les champs fournis (prénom, nom, niveau) au profil."""
+    if data.firstName is not None:
+        user.first_name = data.firstName
+    if data.lastName is not None:
+        user.last_name = data.lastName
+    if data.level is not None:
+        user.level = data.level.value
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def change_password(db: Session, user: User, data: PasswordChange):
+    """Change le mot de passe ; renvoie un message d'erreur, ou None en cas de succès."""
+    if not verify_password(data.current_password, user.password):
+        return "Mot de passe actuel incorrect"
+    if verify_password(data.new_password, user.password):
+        return "Le nouveau mot de passe doit être différent de l'actuel"
+    user.password = hash_password(data.new_password)
+    db.commit()
+    return None
