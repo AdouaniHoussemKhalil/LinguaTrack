@@ -11,11 +11,13 @@ from app.schemas.text import (
     TextAnalyzeRequestManyModes,
     TextResponse,
     DashboardStatsResponse,
+    ProgressResponse,
     DashboardPeriod,
     GetHistoryRequest
 )
 from datetime import datetime, timedelta, timezone
 from app.services.llm_service import LLMError
+from app.services.progress_service import get_user_progress
 from app.services.text_service import analyze_text, get_user_text, get_user_texts, get_user_dashboard_stats, _build_period_filters_v2
 
 router = APIRouter(prefix="/texts", tags=["Texts"])
@@ -70,3 +72,13 @@ def get_dashboard(
     current_user = Depends(get_current_user),
 ):
     return get_user_dashboard_stats(db, current_user.id, period.value)
+
+
+@router.get("/progress", response_model=ProgressResponse)
+def get_progress(
+    period: DashboardPeriod = DashboardPeriod.all,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    """Évolution du score : nombre de textes, score moyen et erreurs par intervalle de temps."""
+    return get_user_progress(db, current_user.id, period.value)

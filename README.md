@@ -184,6 +184,7 @@ Documentation complète et testable : **http://localhost:8000/docs**.
 | `GET` | `/texts/history?period=` | ✅ | Textes analysés sur la période |
 | `GET` | `/texts/history/{user_id}/{text_id}` | ✅ | Détail d'un texte (uniquement les siens) |
 | `GET` | `/texts/dashboard?period=` | ✅ | Statistiques et tendances |
+| `GET` | `/texts/progress?period=` | ✅ | Évolution du score : textes, score moyen et erreurs par heure, jour, semaine ou mois |
 | `GET` | `/health/` | — | État de l'API |
 
 - **Authentification :** `Authorization: Bearer <access_token>`, token obtenu à la connexion ou à l'inscription.

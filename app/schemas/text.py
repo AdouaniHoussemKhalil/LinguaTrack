@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from uuid import UUID
-from typing import Optional, Dict
+from typing import Dict, Literal, Optional
 from app.models.enums import CorrectionMode, LanguageLevel
 from typing import List
 from datetime import datetime
@@ -86,6 +86,19 @@ class DashboardPeriod(str, Enum):
     week = "week"
     month = "month"
     year = "year" 
+
+class ProgressPoint(BaseModel):
+    start: datetime  # début de l'intervalle (UTC)
+    texts: int
+    average_score: Optional[float]  # None si aucun texte dans l'intervalle
+    errors: int
+
+
+class ProgressResponse(BaseModel):
+    period: DashboardPeriod
+    granularity: Literal["hour", "day", "week", "month"]
+    points: List[ProgressPoint]
+
 
 class HistoryPeriod(str, Enum):
     all = "all"
