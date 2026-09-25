@@ -311,6 +311,7 @@ def analyze_text(db: Session, user_id, data: TextAnalyzeRequest, default_level: 
         mode=data.mode.value,
         target_level=target_level,
         score=llm_result["score"],
+        feedback=llm_result["feedback"] or None,
         processing_time=time.time() - start,
     )
     text_entry.errors = [
