@@ -9,6 +9,10 @@ services:
     environment:
       # Remplace la DATABASE_URL de app/.env : l'API parle au conteneur PostgreSQL
       DATABASE_URL: postgresql://postgres:postgres@db:5432/linguatrack
+      # Ollama tourne sur la machine hôte, pas dans le conteneur
+      OLLAMA_URL: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy
