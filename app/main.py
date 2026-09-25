@@ -1,8 +1,11 @@
 import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.core.database import Base, engine
+from app.core.database import engine
+from app.core.migrations import run_migrations
 from app.routers import health, text_router, user_router
 
 
@@ -18,18 +21,19 @@ logger = logging.getLogger(__name__)
 
 
 # ------------------------------
+# DÉMARRAGE : SCHÉMA DE LA BASE
+# ------------------------------
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Alembic remplace create_all, qui n'ajoutait jamais de colonne à une table existante
+    run_migrations(engine)
+    yield
+
+
+# ------------------------------
 # CRÉATION DE L'APP FASTAPI
 # ------------------------------
-app = FastAPI(title="LinguaTrack API")
-
-
-# ------------------------------
-# Database
-#-------------------------------
-
-@app.on_event("startup")
-def startup():
-    Base.metadata.create_all(bind=engine)
+app = FastAPI(title="LinguaTrack API", lifespan=lifespan)
 
 # ------------------------------
 # CONFIGURATION CORS
