@@ -4,14 +4,13 @@ from typing import Callable, Dict, Optional, Tuple
 from mistralai import Mistral
 from app.core.config import settings
 from app.services import claude_service, ollama_service
-from app.services.llm_common import LLMError, build_prompts, normalize_analysis, parse_json
+from app.services.llm_common import ANALYSIS_SCHEMA, LLMError, build_prompts, drop_incoherent, normalize_analysis, parse_json
 
 # Réexportés pour les imports existants (routers, tests)
 __all__ = ["LLMError", "generate_analysis", "normalize_analysis"]
 
 logger = logging.getLogger(__name__)
 
-MODEL = "mistral-medium-latest"
 # 700 tronquait le JSON sur les textes longs ; 4096 couvre un texte de 5 000 caractères corrigé + ses erreurs
 MAX_OUTPUT_TOKENS = 4096
 
@@ -37,12 +36,12 @@ def generate_analysis(text: str, mode: str, target_level: Optional[str]) -> dict
         if not is_configured():
             continue
         try:
-            result = normalize_analysis(analyze(system_prompt, user_prompt, text))
+            result = normalize_analysis(drop_incoherent(analyze(system_prompt, user_prompt, text), text))
         except LLMError as exc:
             logger.warning("Fournisseur %s en échec (%s) : passage au suivant", name, exc)
             last_error = exc
             continue
-        logger.info("Analyse réalisée par %s", name)
+        logger.info("Analyse réalisée par %s", name if name != "mistral" else f"mistral ({settings.MISTRAL_MODEL})")
         return result
 
     if last_error is None:
@@ -65,14 +64,18 @@ def _analyze_with_mistral(system_prompt: str, user_prompt: str, _source_text: st
 
     try:
         chat_response = client.chat.complete(
-            model=MODEL,
+            model=settings.MISTRAL_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.2,
             max_tokens=MAX_OUTPUT_TOKENS,
-            response_format={"type": "json_object"},
+            # Sortie structurée : forme imposée (json_object ne garantissait qu'un JSON valide)
+            response_format={
+                "type": "json_schema",
+                "json_schema": {"name": "analyse_texte", "schema": ANALYSIS_SCHEMA, "strict": True},
+            },
         )
     except Exception as exc:  # réseau, quota, clé invalide… : détail dans les logs, pas pour l'utilisateur
         logger.exception("Appel Mistral en échec")

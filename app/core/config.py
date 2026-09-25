@@ -23,6 +23,8 @@ class Settings(BaseSettings):
 
     # Optionnelle au démarrage : vérifiée au moment de l'appel au LLM
     MISTRAL_API_KEY: Optional[str] = None
+    # L'abonnement actuel n'ouvre que les modèles Ministral (medium/small : 0 requête/min)
+    MISTRAL_MODEL: str = "ministral-8b-latest"
 
     # Fournisseurs d'analyse essayés dans cet ordre jusqu'au premier succès
     # (un fournisseur non configuré est ignoré)
