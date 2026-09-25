@@ -5,39 +5,12 @@ import logging
 
 import anthropic
 from app.core.config import settings
-from app.services.llm_common import ERROR_TYPES, SEVERITIES, LLMError
+from app.services.llm_common import ANALYSIS_SCHEMA, LLMError
 
 logger = logging.getLogger(__name__)
 
 # Correction d'un texte ≤ 5 000 caractères + ses erreurs : large marge sans streaming
 MAX_OUTPUT_TOKENS = 16000
-
-# Même forme que la réponse demandée à Mistral ; la sortie structurée garantit un JSON conforme
-ANALYSIS_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "corrected_text": {"type": "string"},
-        "score": {"type": "integer"},
-        "feedback": {"type": "string"},
-        "grammar_errors": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "original": {"type": "string"},
-                    "corrected": {"type": "string"},
-                    "explanation": {"type": "string"},
-                    "error_type": {"type": "string", "enum": list(ERROR_TYPES)},
-                    "severity": {"type": "string", "enum": list(SEVERITIES)},
-                },
-                "required": ["original", "corrected", "explanation", "error_type", "severity"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    "required": ["corrected_text", "score", "feedback", "grammar_errors"],
-    "additionalProperties": False,
-}
 
 UNAVAILABLE = "Le service d'analyse est momentanément indisponible. Réessayez dans quelques instants."
 
