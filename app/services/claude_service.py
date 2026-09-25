@@ -3,9 +3,13 @@
 import json
 import logging
 
-import anthropic
 from app.core.config import settings
 from app.services.llm_common import ANALYSIS_SCHEMA, LLMError
+
+try:
+    import anthropic
+except ImportError:  # Claude est facultatif : l'API doit démarrer sans le paquet
+    anthropic = None
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +20,12 @@ UNAVAILABLE = "Le service d'analyse est momentanément indisponible. Réessayez 
 
 
 def is_configured() -> bool:
-    return bool(settings.ANTHROPIC_API_KEY)
+    if not settings.ANTHROPIC_API_KEY:
+        return False
+    if anthropic is None:
+        logger.warning("ANTHROPIC_API_KEY définie mais paquet `anthropic` absent : pip install -r requirements.txt")
+        return False
+    return True
 
 
 def analyze(system_prompt: str, user_prompt: str) -> dict:
