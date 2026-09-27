@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = "deepseek-r1:1.5b"
     OLLAMA_TIMEOUT: float = 180.0
 
+    # Nombre maximal d'analyses par utilisateur (chaque analyse appelle un LLM) ; 0 = sans limite
+    ANALYSES_PER_HOUR: int = Field(default=30, ge=0)
+    ANALYSES_PER_DAY: int = Field(default=200, ge=0)
+
     # Origines autorisées par CORS, séparées par des virgules
     CORS_ORIGINS: str = "http://localhost:5173"
 
