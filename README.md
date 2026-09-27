@@ -144,7 +144,6 @@ app/
 | `users` | email (unique), mot de passe haché (bcrypt), prénom, nom, niveau (A1 à C2) |
 | `texts` | texte original et corrigé, mode, niveau cible, score, temps de traitement, date |
 | `errors` | erreurs d'un texte : type, sévérité, fragment original, correction, explication |
-| `user_error_stats` | prévue pour des statistiques par type d'erreur, **pas encore alimentée** |
 
 ### Migrations de la base
 
@@ -329,7 +328,6 @@ Claude Pro). Sortie structurée par schéma JSON, et repli côté serveur si le 
 
 ## Limites connues et prochaines étapes
 
-- **Le `feedback` global du modèle n'est pas enregistré** ; `user_error_stats` n'est pas alimentée.
 - **Le mode est transmis au modèle par son seul nom** (`professional`, `simple`…), sans consigne détaillée.
 - `datetime.utcnow` est déprécié.
 - Les « exercices personnalisés » évoqués au début du projet ne sont pas implémentés.
