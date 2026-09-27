@@ -80,6 +80,8 @@ La configuration est validée au démarrage : l'API refuse de démarrer sans `SE
 | `DATABASE_URL` | `sqlite:///./linguatrack.db` | Base de données (PostgreSQL en production) |
 | `SQL_ECHO` | `false` | Affiche les requêtes SQL (débogage) |
 | `CORS_ORIGINS` | `http://localhost:5173` | Origines autorisées, séparées par des virgules |
+| `ANALYSES_PER_HOUR` | `30` | Analyses maximum par utilisateur et par heure (0 = sans limite) |
+| `ANALYSES_PER_DAY` | `200` | Analyses maximum par utilisateur et par jour (0 = sans limite) |
 | `LLM_PROVIDERS` | `mistral,ollama,claude` | Ordre des fournisseurs d'IA (voir [plus bas](#la-chaîne-de-fournisseurs)) |
 | `MISTRAL_API_KEY` | — | Clé Mistral ; sans clé, Mistral est ignoré |
 | `MISTRAL_MODEL` | `ministral-8b-latest` | Modèle Mistral |
@@ -198,6 +200,7 @@ Documentation complète et testable : **http://localhost:8000/docs**.
   `{is_success, error, access_token, user_id}` ; le front s'appuie sur ce format.
 - **Mot de passe :** au moins 8 caractères, une minuscule, une majuscule et un chiffre (même règle que le front).
 - **Erreurs :** 401 (token absent ou expiré), 403 (texte d'un autre utilisateur), 404, 422 (requête invalide),
+  **429 si la limite d'analyses est atteinte** (message et en-tête `Retry-After`),
   **502 si l'IA n'a pas pu analyser le texte** (message en français dans `detail`).
 
 ---

@@ -19,6 +19,7 @@ from app.schemas.text import (
 from datetime import datetime, timedelta, timezone
 from app.services.llm_service import LLMError
 from app.services.progress_service import get_user_progress
+from app.services.quota_service import check_analysis_quota
 from app.services.text_service import delete_user_text, list_user_texts
 from app.services.text_service import analyze_text, get_user_text, get_user_texts, get_user_dashboard_stats, _build_period_filters_v2
 
@@ -31,6 +32,14 @@ def analyze(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
+    # Avant l'appel au LLM : un utilisateur au-delà de son quota ne coûte rien
+    exceeded = check_analysis_quota(db, current_user.id)
+    if exceeded:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=exceeded.message,
+            headers={"Retry-After": str(exceeded.retry_after_seconds)},
+        )
     try:
         return analyze_text(db, current_user.id, data, default_level=current_user.level)
     except LLMError as exc:
