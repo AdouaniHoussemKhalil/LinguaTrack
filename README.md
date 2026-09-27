@@ -19,7 +19,8 @@ permettent de suivre sa progression.
 6. [L'IA dans LinguaTrack](#lia-dans-linguatrack)
 7. [Dépannage](#dépannage)
 8. [Limites connues et prochaines étapes](#limites-connues-et-prochaines-étapes)
-9. [Contribuer](#contribuer)
+9. [Tests](#tests)
+10. [Contribuer](#contribuer)
 
 ---
 
@@ -330,9 +331,24 @@ Claude Pro). Sortie structurée par schéma JSON, et repli côté serveur si le 
 
 - **Le `feedback` global du modèle n'est pas enregistré** ; `user_error_stats` n'est pas alimentée.
 - **Le mode est transmis au modèle par son seul nom** (`professional`, `simple`…), sans consigne détaillée.
-- **Pas encore de tests** dans le dépôt.
 - `datetime.utcnow` est déprécié.
 - Les « exercices personnalisés » évoqués au début du projet ne sont pas implémentés.
+
+---
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+Les tests (`tests/`) utilisent une base SQLite temporaire et **aucune valeur de `app/.env`** ; les appels
+aux LLM sont simulés (un test qui oublie de simuler Mistral, Ollama ou Claude échoue au lieu d'appeler
+le vrai service). Pour les lancer sur PostgreSQL : `TEST_DATABASE_URL=postgresql://… pytest`.
+
+La CI GitHub Actions ([`.github/workflows/tests.yml`](.github/workflows/tests.yml)) lance les tests sous
+SQLite **et** PostgreSQL 15 sur chaque Pull Request et chaque push vers `develop` et `main`.
 
 ---
 
