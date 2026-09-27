@@ -87,6 +87,14 @@ class DashboardPeriod(str, Enum):
     month = "month"
     year = "year" 
 
+class TextPage(BaseModel):
+    items: List[TextResponse]
+    total: int
+    page: int
+    page_size: int
+    pages: int
+
+
 class ProgressPoint(BaseModel):
     start: datetime  # début de l'intervalle (UTC)
     texts: int
