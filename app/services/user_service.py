@@ -1,14 +1,10 @@
-from sqlalchemy.orm import Session
-from app.models.user import User
-from app.schemas.user import UserCreate
 import uuid
-
+from uuid import UUID
 
 from sqlalchemy.orm import Session
+from app.core.security import create_access_token, hash_password, verify_password
 from app.models.user import User
 from app.schemas.user import PasswordChange, UserCreate, UserUpdate
-from app.core.security import create_access_token, hash_password, verify_password
-from uuid import UUID
 
 
 
