@@ -4,8 +4,8 @@ import uuid
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy import func, or_
+from sqlalchemy.orm import Session, selectinload
 from app.models.text import TextSubmission
 from app.models.error import Error
 from app.schemas.text import TextAnalyzeRequest
@@ -20,6 +20,37 @@ def get_user_texts(db: Session, user_id: UUID):
 
 def get_user_text(db: Session, user_id: UUID, text_id: UUID):
     return db.query(TextSubmission).filter(TextSubmission.user_id == user_id, TextSubmission.id == text_id).first()
+
+
+def list_user_texts(db: Session, user_id: UUID, period: str = "all", query: Optional[str] = None,
+                    page: int = 1, page_size: int = 10) -> dict:
+    """Textes de l'utilisateur, du plus récent au plus ancien : période, recherche, pagination."""
+    filters, _previous, _label = _build_period_filters_v2(user_id, period, datetime.now(timezone.utc))
+    if query and query.strip():
+        pattern = f"%{query.strip()}%"
+        filters.append(or_(TextSubmission.original_text.ilike(pattern), TextSubmission.corrected_text.ilike(pattern)))
+
+    total = db.query(func.count(TextSubmission.id)).filter(*filters).scalar() or 0
+    items = (
+        db.query(TextSubmission)
+        .options(selectinload(TextSubmission.errors))  # erreurs de toute la page en une requête
+        .filter(*filters)
+        .order_by(TextSubmission.created_at.desc(), TextSubmission.id)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return {"items": items, "total": total, "page": page, "page_size": page_size, "pages": max(1, -(-total // page_size))}
+
+
+def delete_user_text(db: Session, user_id: UUID, text_id: UUID) -> bool:
+    """Supprime un texte de l'utilisateur et ses erreurs ; False s'il n'existe pas (ou appartient à un autre)."""
+    entry = get_user_text(db, user_id, text_id)
+    if entry is None:
+        return False
+    db.delete(entry)
+    db.commit()
+    return True
 
 
 def _compute_change(current_value: Optional[float], previous_value: Optional[float]) -> Optional[float]:
