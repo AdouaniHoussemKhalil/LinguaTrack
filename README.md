@@ -184,8 +184,10 @@ Documentation complète et testable : **http://localhost:8000/docs**.
 | `PUT` | `/users/me/password` | ✅ | Changer de mot de passe (`current_password`, `new_password`) ; 204 |
 | `POST` | `/texts/analyze` | ✅ | Analyse d'un texte (`text` ≤ 5 000 caractères, `mode`, `target_level` facultatif) |
 | `GET` | `/texts/modes` | — | Modes disponibles |
-| `GET` | `/texts/history?period=` | ✅ | Textes analysés sur la période |
-| `GET` | `/texts/history/{user_id}/{text_id}` | ✅ | Détail d'un texte (uniquement les siens) |
+| `GET` | `/texts?period=&q=&page=&page_size=` | ✅ | Historique paginé (≤ 50 par page), recherche dans le texte original ou corrigé |
+| `GET` | `/texts/{text_id}` | ✅ | Détail d'un de ses textes |
+| `DELETE` | `/texts/{text_id}` | ✅ | Supprimer un de ses textes (et ses erreurs) ; 204 |
+| `GET` | `/texts/history?period=` · `/texts/history/{user_id}/{text_id}` | ✅ | *Dépréciées*, conservées pour compatibilité |
 | `GET` | `/texts/dashboard?period=` | ✅ | Statistiques et tendances |
 | `GET` | `/texts/progress?period=` | ✅ | Évolution du score : textes, score moyen et erreurs par heure, jour, semaine ou mois |
 | `GET` | `/health/` | — | État de l'API |

@@ -24,4 +24,5 @@ class TextSubmission(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", backref="texts")
-    errors = relationship("Error", back_populates="text")
+    # Supprimer un texte supprime ses erreurs (cascade côté ORM, sans changement de schéma)
+    errors = relationship("Error", back_populates="text", cascade="all, delete-orphan")
