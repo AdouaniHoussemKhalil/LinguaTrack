@@ -131,7 +131,7 @@ class FakeAuthService:
 
         if route == "updatePassword":
             if user["password"] != body["currentPassword"]:
-                return _error(401, "invalidCredentials")
+                return _error(400, "currentPasswordNotCorrect")
             user["password"] = body["password"]
             self.revoke_all(user_id)
             result = self._session(user, 201)
@@ -144,7 +144,7 @@ class FakeAuthService:
         if route in ("activateMFA", "deactivateMFA"):
             code = body.get("activationId") or body.get("deactivationId")
             if self.last_code.get(user["email"]) != code:
-                return _error(400, "invalidCode")
+                return _error(400, "invalidMfaVerification")
             user["mfa"] = route == "activateMFA"
             return AuthResult(200, {"isSuccess": True})
 

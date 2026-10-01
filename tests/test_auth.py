@@ -174,7 +174,7 @@ def test_mfa_activation_from_settings(browser, auth_service):
     browser.post("/auth/register", json=signup_payload("set@exemple.com"))
     assert browser.post("/users/me/mfa/request", json={"action": "activate"}).status_code == 200
     bad = browser.post("/users/me/mfa/confirm", json={"action": "activate", "code": "000000x"})
-    assert bad.status_code == 400 and bad.json()["error"]["code"] == "invalidCode"
+    assert bad.status_code == 400 and bad.json()["error"]["code"] == "invalidMfaVerification"
     code = auth_service.last_code["set@exemple.com"]
     assert browser.post("/users/me/mfa/confirm", json={"action": "activate", "code": code}).status_code == 200
     assert browser.get("/users/me").json()["mfa_enabled"] is True

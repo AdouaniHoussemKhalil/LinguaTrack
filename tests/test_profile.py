@@ -42,7 +42,7 @@ def test_new_level_is_used_for_analysis(client, monkeypatch):
 def test_change_password_flow(client, auth_service):
     h, _ = register_user(client)
     wrong = client.put("/users/me/password", json={"current_password": "Mauvais1!", "new_password": "Nouveau12!"}, headers=h)
-    assert wrong.status_code == 401 and wrong.json()["error"]["code"] == "invalidCredentials"
+    assert wrong.status_code == 400 and wrong.json()["error"]["code"] == "currentPasswordNotCorrect"
     weak = client.put("/users/me/password", json={"current_password": PASSWORD, "new_password": "Nouveau12"}, headers=h)
     assert weak.status_code == 422 and "caractère spécial" in weak.text
     ok = client.put("/users/me/password", json={"current_password": PASSWORD, "new_password": "Nouveau12!"}, headers=h)
