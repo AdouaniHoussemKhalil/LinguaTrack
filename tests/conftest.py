@@ -15,7 +15,10 @@ _TMP_DIR = pathlib.Path(tempfile.mkdtemp(prefix="linguatrack-tests-"))
 
 os.environ.update({
     "DATABASE_URL": os.environ.get("TEST_DATABASE_URL") or f"sqlite:///{(_TMP_DIR / 'test.db').as_posix()}",
-    "SECRET_KEY": "test-secret-key-not-for-production-0123456789",
+    "AUTH_API_URL": "http://auth.invalid",  # jamais appelé : voir FakeAuthService
+    "AUTH_APP_ID": "test-app-id",
+    "AUTH_APP_SECRET": "test-app-secret",
+    "COOKIE_SECURE": "false",
     "CORS_ORIGINS": "http://localhost:5173",
     "SQL_ECHO": "false",
     "LLM_PROVIDERS": "mistral,ollama,claude",
@@ -46,6 +49,18 @@ def _block_real_llm_calls(monkeypatch):
     monkeypatch.setattr(ollama_service.httpx, "post", refuse)
     if claude_service.anthropic is not None:
         monkeypatch.setattr(claude_service.anthropic, "Anthropic", _NoNetwork)
+
+
+@pytest.fixture(autouse=True)
+def auth_service(monkeypatch):
+    """Service d'authentification simulé : aucun appel au vrai service (ni à sa base) pendant les tests."""
+    from app.services import auth_client
+    from fake_auth import FakeAuthService  # importe l'app : après les variables d'environnement
+
+    fake = FakeAuthService()
+    monkeypatch.setattr(auth_client, "call", fake)
+    monkeypatch.setattr(auth_client, "_refreshes", {})
+    return fake
 
 
 @pytest.fixture(scope="session")

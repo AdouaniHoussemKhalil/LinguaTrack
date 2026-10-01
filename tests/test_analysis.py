@@ -4,11 +4,7 @@ import pytest
 from app.services import text_service
 from app.services.llm_service import LLMError, normalize_analysis
 
-def register(client, level=None):
-    payload = {"email": f"u{uuid.uuid4().hex[:8]}@exemple.com", "password": "Abcdef12", "firstName": "A", "lastName": "B"}
-    if level: payload["level"] = level
-    body = client.post("/users/register", json=payload).json()
-    return {"Authorization": f"Bearer {body['access_token']}"}, body["user_id"]
+from helpers import register_user as register
 
 FAKE = {"corrected_text": "Ça va.", "score": 130, "feedback": "Bien", "grammar_errors": [
     {"original": "sa", "corrected": "ça", "explanation": "cédille", "error_type": "Orthographe", "severity": "HIGH"},

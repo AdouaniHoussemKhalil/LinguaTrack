@@ -22,7 +22,7 @@ def test_mistral_request_uses_configured_model_and_strict_schema(monkeypatch):
 
 def test_default_mistral_model_is_accessible_one():
     from app.core.config import Settings
-    assert Settings(_env_file=None, SECRET_KEY="x").MISTRAL_MODEL == "ministral-8b-latest"
+    assert Settings(_env_file=None).MISTRAL_MODEL == "ministral-8b-latest"
 
 def test_feedback_object_becomes_text():
     raw = {**RAW, "feedback": {"global": "Deux erreurs d'accord.", "suggestions": ["Relisez les accords.", "Vérifiez les terminaisons."]}}

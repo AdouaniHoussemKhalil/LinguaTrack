@@ -4,11 +4,12 @@ from datetime import datetime, timedelta, timezone
 from app.core.database import SessionLocal
 from app.models.error import Error
 from app.models.text import TextSubmission
+from helpers import register_user
 
 
 def _user(client):
-    body = client.post("/users/register", json={"email": f"h{uuid.uuid4().hex[:8]}@x.com", "password": "Abcdef12", "firstName": "A", "lastName": "B"}).json()
-    return uuid.UUID(body["user_id"]), {"Authorization": f"Bearer {body['access_token']}"}
+    headers, user_id = register_user(client)
+    return uuid.UUID(user_id), headers
 
 
 def _texts(user_id, specs):
