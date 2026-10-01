@@ -4,6 +4,7 @@ import anthropic, httpx2, pytest
 from app.core.config import settings
 from app.services import claude_service, llm_service, text_service
 from app.services.llm_common import LLMError
+from helpers import register_user
 
 RAW = {"corrected_text": "Ça va.", "score": 88, "feedback": "Bien", "grammar_errors": [
     {"original": "sa", "corrected": "ça", "explanation": "cédille", "error_type": "orthographe", "severity": "high"}]}
@@ -35,8 +36,7 @@ def test_both_fail_returns_502_and_saves_nothing(client, monkeypatch):
     monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "sk-test")
     monkeypatch.setattr(llm_service, "_analyze_with_mistral", mistral_fails)
     monkeypatch.setattr(claude_service, "analyze", lambda s, u: (_ for _ in ()).throw(LLMError("Claude indisponible")))
-    body = client.post("/users/register", json={"email": f"c{uuid.uuid4().hex[:6]}@x.com", "password": "Abcdef12", "firstName": "A", "lastName": "B"}).json()
-    h = {"Authorization": f"Bearer {body['access_token']}"}
+    h, _ = register_user(client)
     r = client.post("/texts/analyze", json={"text": "Bonjour"}, headers=h)
     assert r.status_code == 502 and r.json()["detail"] == "Claude indisponible"
     assert client.get("/texts/history", params={"period": "all"}, headers=h).json() == []
@@ -45,8 +45,8 @@ def test_endpoint_uses_claude_when_mistral_down(client, monkeypatch):
     monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "sk-test")
     monkeypatch.setattr(llm_service, "_analyze_with_mistral", mistral_fails)
     monkeypatch.setattr(claude_service, "analyze", lambda s, u: RAW)
-    body = client.post("/users/register", json={"email": f"d{uuid.uuid4().hex[:6]}@x.com", "password": "Abcdef12", "firstName": "A", "lastName": "B"}).json()
-    r = client.post("/texts/analyze", json={"text": "sa va"}, headers={"Authorization": f"Bearer {body['access_token']}"})
+    h, _ = register_user(client)
+    r = client.post("/texts/analyze", json={"text": "sa va"}, headers=h)
     assert r.status_code == 200 and r.json()["corrected_text"] == "Ça va." and r.json()["errors"][0]["severity"] == "high"
 
 # ---------- claude_service.analyze avec client Anthropic simulé ----------

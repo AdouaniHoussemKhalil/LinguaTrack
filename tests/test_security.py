@@ -1,9 +1,10 @@
 import os, uuid, pytest
 from pydantic import ValidationError
 
-def test_settings_require_secret_key(monkeypatch):
+@pytest.mark.parametrize("missing", ["AUTH_APP_ID", "AUTH_APP_SECRET"])
+def test_settings_require_auth_credentials(monkeypatch, missing):
     from app.core.config import Settings
-    monkeypatch.delenv("SECRET_KEY", raising=False)
+    monkeypatch.delenv(missing, raising=False)
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
 
@@ -11,20 +12,21 @@ def test_settings_defaults(monkeypatch):
     from app.core.config import Settings
     for k in ("DATABASE_URL", "CORS_ORIGINS"):
         monkeypatch.delenv(k, raising=False)
-    s = Settings(_env_file=None, SECRET_KEY="x", CORS_ORIGINS="http://a.test, http://b.test")
+    s = Settings(_env_file=None, CORS_ORIGINS="http://a.test, http://b.test")
     assert s.DATABASE_URL.startswith("sqlite") and s.env == "dev"
     assert s.cors_origins == ["http://a.test", "http://b.test"]
 
 def test_users_me(client):
-    email = f"u{uuid.uuid4().hex[:8]}@exemple.com"
-    r = client.post("/users/register", json={"email": email, "password": "Abcdef12", "firstName": "Ana", "lastName": "Lima"})
-    body = r.json(); assert body["is_success"], body
-    token, uid = body["access_token"], body["user_id"]
+    from helpers import register_user
+    h, uid = register_user(client, email="ana@exemple.com")
     assert client.get("/users/me").status_code == 401
-    me = client.get("/users/me", headers={"Authorization": f"Bearer {token}"})
-    assert me.status_code == 200 and me.json()["email"] == email and me.json()["first_name"] == "Ana" and "password" not in me.json()
-    # l'ancienne route publique n'existe plus
+    me = client.get("/users/me", headers=h)
+    assert me.status_code == 200 and me.json()["email"] == "ana@exemple.com" and me.json()["first_name"] == "Ana"
+    assert "password" not in me.json() and "auth_user_id" not in me.json()
+    # l'ancienne route publique et les anciennes routes de connexion n'existent plus
     assert client.get(f"/users/{uid}").status_code in (404, 405)
+    for path in ("/users/register", "/users/login", "/users/token"):
+        assert client.post(path, json={}).status_code in (404, 405)
 
 def test_cors_only_allowed_origin(client):
     ok = client.get("/health/", headers={"Origin": "http://localhost:5173"})

@@ -5,7 +5,7 @@ L'utilisateur envoie un texte et un mode de correction ; l'API renvoie le texte 
 et la liste des erreurs (type, sévérité, explication). Un tableau de bord et un historique
 permettent de suivre sa progression.
 
-- **Stack :** FastAPI, SQLAlchemy 2, Pydantic v2, JWT, PostgreSQL (ou SQLite en local)
+- **Stack :** FastAPI, SQLAlchemy 2, Pydantic v2, service d'authentification auth-web-app-api (cookies httpOnly), PostgreSQL (ou SQLite en local)
 - **IA :** Mistral (`ministral-8b-latest`), avec repli sur un modèle local via Ollama, puis sur Claude
 - **Front :** dépôt séparé [`linguaTrack_web`](https://github.com/AdouaniHoussemKhalil/linguaTrack_web) (React + Vite)
 
@@ -39,7 +39,7 @@ python -m venv .venv
 # 2. Dépendances
 pip install -r requirements.txt
 
-# 3. Configuration : copier le modèle puis renseigner au moins SECRET_KEY et MISTRAL_API_KEY
+# 3. Configuration : copier le modèle puis renseigner au moins AUTH_APP_ID, AUTH_APP_SECRET et MISTRAL_API_KEY
 copy .env.example app\.env        # Windows
 # cp .env.example app/.env        # macOS / Linux
 
@@ -57,11 +57,20 @@ Le schéma de la base est créé et mis à jour automatiquement au démarrage (m
 [Migrations](#migrations-de-la-base)). Sans `DATABASE_URL`, la base est un fichier SQLite `linguatrack.db`
 à la racine du dossier (ignoré par Git).
 
-Pour générer une `SECRET_KEY` :
+### Authentification
 
-```bash
-python -c "import secrets; print(secrets.token_hex(32))"
-```
+Les comptes (mot de passe, vérification d'e-mail, MFA, connexion Google, sessions) sont gérés par le
+service **auth-web-app-api** (dépôt séparé). Avant le premier lancement :
+
+1. Démarrer le service (`http://localhost:8080/health` doit répondre `"database":"up"`).
+2. Dans son dashboard, déclarer l'application LinguaTrack et copier son `x-app-id` / `x-app-secret`
+   dans `AUTH_APP_ID` / `AUTH_APP_SECRET` (`app/.env`).
+3. Recommandé : y activer la vérification d'e-mail et garder la MFA en mode « code ».
+
+L'API sert de relais : elle seule connaît le secret, et pose les tokens du service dans des cookies
+`httpOnly` (`lt_access`, `lt_refresh`) ; le navigateur ne les voit jamais. La table `users` garde ce qui
+est propre à LinguaTrack (niveau, textes) : un compte créé avant ce service est relié à son compte
+d'auth à la première connexion, par l'e-mail, une fois celui-ci vérifié.
 
 ---
 
@@ -70,13 +79,14 @@ python -c "import secrets; print(secrets.token_hex(32))"
 Toute la configuration est lue par [`app/core/config.py`](app/core/config.py) (`pydantic-settings`),
 depuis les variables d'environnement puis le fichier **`app/.env`**. Ce fichier contient des secrets :
 il n'est **jamais commité**. Le modèle à copier est [`.env.example`](.env.example).
-La configuration est validée au démarrage : l'API refuse de démarrer sans `SECRET_KEY`.
+La configuration est validée au démarrage : l'API refuse de démarrer sans `AUTH_APP_ID` ni `AUTH_APP_SECRET`.
 
 | Variable | Défaut | Rôle |
 |---|---|---|
-| `SECRET_KEY` | **obligatoire** | Signature des tokens JWT |
-| `ALGORITHM` | `HS256` | Algorithme JWT |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | Durée de validité d'une connexion |
+| `AUTH_APP_ID` / `AUTH_APP_SECRET` | **obligatoires** | Identifiants de l'application dans le service d'authentification |
+| `AUTH_API_URL` | `http://localhost:8080` | URL du service d'authentification |
+| `AUTH_TIMEOUT` | `30` | Délai maximal d'un appel au service d'authentification (s) |
+| `COOKIE_SECURE` | `false` | Cookies de session envoyés en HTTPS seulement (`true` en production) |
 | `DATABASE_URL` | `sqlite:///./linguatrack.db` | Base de données (PostgreSQL en production) |
 | `SQL_ECHO` | `false` | Affiche les requêtes SQL (débogage) |
 | `CORS_ORIGINS` | `http://localhost:5173` | Origines autorisées, séparées par des virgules |
@@ -122,14 +132,15 @@ app/
 ├── core/
 │   ├── config.py      # Settings (pydantic-settings), validés au démarrage
 │   ├── database.py    # engine SQLAlchemy, get_db()
-│   ├── security.py    # hachage bcrypt, création des JWT
-│   ├── dependencies.py# get_current_user() : utilisateur du token
+│   ├── session.py     # cookies httpOnly de la session (posés par un middleware)
+│   ├── dependencies.py# get_current_user() : session vérifiée par le service d'auth
 │   └── migrations.py  # applique les migrations Alembic au démarrage
 ├── models/            # tables SQLAlchemy + enums (modes, niveaux, sévérités)
 ├── schemas/           # modèles Pydantic des requêtes et réponses
-├── routers/           # health, users, texts : minces, ils délèguent aux services
+├── routers/           # health, auth (relais), users, texts : minces, ils délèguent aux services
 └── services/
-    ├── user_service.py    # inscription, authentification
+    ├── auth_client.py     # appels au service d'authentification, refresh unique
+    ├── user_service.py    # comptes locaux : création, liaison par e-mail, profil
     ├── text_service.py    # analyse d'un texte, historique, statistiques du dashboard
     ├── llm_service.py     # chaîne de fournisseurs d'IA + appel Mistral
     ├── ollama_service.py  # appel au modèle local (Ollama)
@@ -175,12 +186,17 @@ Documentation complète et testable : **http://localhost:8000/docs**.
 
 | Méthode | Route | Auth | Rôle |
 |---|---|---|---|
-| `POST` | `/users/register` | — | Inscription (`email`, `password`, `firstName`, `lastName`, `level`) |
-| `POST` | `/users/login` | — | Connexion (`username` = email, `password`) |
-| `POST` | `/users/token` | — | Connexion au format OAuth2 (bouton *Authorize* de Swagger) |
-| `GET` | `/users/me` | ✅ | Profil de l'utilisateur connecté |
-| `PATCH` | `/users/me` | ✅ | Modifier prénom, nom, niveau (`firstName`, `lastName`, `level`, tous facultatifs) |
-| `PUT` | `/users/me/password` | ✅ | Changer de mot de passe (`current_password`, `new_password`) ; 204 |
+| `POST` | `/auth/register` | — | Inscription (`email`, `password`, `confirmPassword`, `firstName`, `lastName`, `level`) ; `emailVerificationRequired` si l'adresse doit être vérifiée |
+| `POST` | `/auth/verify-email` · `/auth/resend-verification` | — | Vérification de l'adresse (`email`, `code`) ; n'ouvre pas de session |
+| `POST` | `/auth/login` | — | Connexion (`email`, `password`) ; `{MFARequired: true}` si la MFA est active |
+| `POST` | `/auth/login/mfa` | — | Deuxième étape (`email`, `mfaCode`) |
+| `POST` | `/auth/google` | — | Connexion / inscription Google (`token` = ID token) |
+| `POST` | `/auth/forgot-password` · `/auth/verify-reset-code` · `PUT /auth/reset-password` | — | Mot de passe oublié : code par e-mail → `resetToken` → nouveau mot de passe |
+| `POST` | `/auth/logout` | — | Ferme la session (`allDevices` facultatif) et efface les cookies |
+| `GET` | `/users/me` | ✅ | Profil de l'utilisateur connecté (`mfa_enabled` inclus) |
+| `PATCH` | `/users/me` | ✅ | Modifier prénom, nom (3 caractères min.), niveau (`firstName`, `lastName`, `level`, tous facultatifs) |
+| `PUT` | `/users/me/password` | ✅ | Changer de mot de passe (`current_password`, `new_password`) ; 204, autres sessions fermées |
+| `POST` | `/users/me/mfa/request` · `/users/me/mfa/confirm` | ✅ | MFA : code par e-mail (`action` = `activate` \| `deactivate`), puis confirmation (`action`, `code`) |
 | `POST` | `/texts/analyze` | ✅ | Analyse d'un texte (`text` ≤ 5 000 caractères, `mode`, `target_level` facultatif) |
 | `GET` | `/texts/modes` | — | Modes disponibles |
 | `GET` | `/texts?period=&q=&page=&page_size=` | ✅ | Historique paginé (≤ 50 par page), recherche dans le texte original ou corrigé |
@@ -191,13 +207,16 @@ Documentation complète et testable : **http://localhost:8000/docs**.
 | `GET` | `/texts/progress?period=` | ✅ | Évolution du score : textes, score moyen et erreurs par heure, jour, semaine ou mois |
 | `GET` | `/health/` | — | État de l'API |
 
-- **Authentification :** `Authorization: Bearer <access_token>`, token obtenu à la connexion ou à l'inscription.
+- **Authentification :** cookies de session posés par `/auth/*` (Swagger les utilise après `/auth/login`).
+  Un autre client peut envoyer `Authorization: Bearer <access_token du service d'auth>` (sans renouvellement).
 - **Périodes :** `all`, `day`, `week`, `month`, `year`. Hors `all`, le dashboard compare avec la période
   précédente (`*_change`, en %).
 - **Modes :** `correction`, `professional`, `simple`, `natural`, `persuasive`.
-- **Convention :** `/users/register` et `/users/login` répondent toujours HTTP 200 au format
-  `{is_success, error, access_token, user_id}` ; le front s'appuie sur ce format.
-- **Mot de passe :** au moins 8 caractères, une minuscule, une majuscule et un chiffre (même règle que le front).
+- **Routes `/auth/*` :** statut et corps du service d'authentification relayés tels quels, erreurs au format
+  `{error: {code, message, details}}` (`invalidCredentials`, `emailNotVerified`, `invalidCode`, `tooManyRequests`…) ;
+  les tokens ne sont jamais renvoyés. **503** (`authUnavailable`) si le service ne répond pas.
+- **Mot de passe :** au moins 8 caractères, une minuscule, une majuscule, un chiffre et un caractère spécial
+  (règle du service d'authentification, reprise par le front).
 - **Erreurs :** 401 (token absent ou expiré), 403 (texte d'un autre utilisateur), 404, 422 (requête invalide),
   **429 si la limite d'analyses est atteinte** (message et en-tête `Retry-After`),
   **502 si l'IA n'a pas pu analyser le texte** (message en français dans `detail`).
@@ -321,7 +340,9 @@ Claude Pro). Sortie structurée par schéma JSON, et repli côté serveur si le 
 
 | Symptôme | Cause probable | Solution |
 |---|---|---|
-| L'API refuse de démarrer : `SECRET_KEY … Field required` | `SECRET_KEY` absente de `app/.env` | L'ajouter (voir [Démarrage rapide](#démarrage-rapide)) |
+| L'API refuse de démarrer : `AUTH_APP_ID … Field required` | Identifiants du service d'auth absents de `app/.env` | Les ajouter (voir [Authentification](#authentification)) |
+| 503 `authUnavailable` à la connexion | Service d'authentification arrêté, ou sa base MongoDB injoignable | Le démarrer ; vérifier `AUTH_API_URL` et `/health` du service |
+| 403 `invalidAppClient` | Mauvais `AUTH_APP_ID` / `AUTH_APP_SECRET`, secret régénéré ou application désactivée | Recopier les identifiants depuis le dashboard |
 | `ModuleNotFoundError` au démarrage | Dépendances non installées | `pip install -r requirements.txt` dans le `.venv` |
 | Logs `Fournisseur mistral en échec … 429` | Modèle fermé à votre offre ou quota atteint | Vérifier `MISTRAL_MODEL` ; tester avec le tableau [ci-dessus](#mistral--ce-qui-a-été-fait) |
 | Analyse très lente (≥ 1 min) | Mistral a échoué, l'analyse passe par Ollama | Normal sur CPU ; le front attend jusqu'à 4 minutes |

@@ -47,6 +47,10 @@ def test_database_created_before_alembic_keeps_its_data(tmp_path):
         "from app.models.text import TextSubmission\n"
         "Base.metadata.create_all(bind=engine)\n"
         "with engine.begin() as c: c.execute(sa.text('ALTER TABLE texts DROP COLUMN feedback'))\n"
+        # Avant le service d'authentification : mot de passe local, pas de auth_user_id
+        "with engine.begin() as c: c.execute(sa.text('DROP INDEX ix_users_auth_user_id'))\n"
+        "with engine.begin() as c: c.execute(sa.text('ALTER TABLE users DROP COLUMN auth_user_id'))\n"
+        "with engine.begin() as c: c.execute(sa.text(\"ALTER TABLE users ADD COLUMN password VARCHAR NOT NULL DEFAULT ''\"))\n"
         "with engine.begin() as c: c.execute(sa.text(\"INSERT INTO users (id, email, password, first_name, last_name, level) "
         "VALUES ('0123456789abcdef0123456789abcdef', 'ancien@exemple.com', 'h', 'A', 'B', 'B2')\"))"
     )
@@ -57,6 +61,8 @@ def test_database_created_before_alembic_keeps_its_data(tmp_path):
     con = sqlite3.connect(db)
     assert con.execute("select email, level from users").fetchall() == [("ancien@exemple.com", "B2")]
     assert "feedback" in [c[1] for c in con.execute("pragma table_info(texts)")]  # migration appliquée
+    columns = [c[1] for c in con.execute("pragma table_info(users)")]
+    assert "auth_user_id" in columns and "password" not in columns
     con.close()
 
 

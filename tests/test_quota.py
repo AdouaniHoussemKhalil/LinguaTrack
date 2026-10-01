@@ -6,6 +6,7 @@ import pytest
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.text import TextSubmission
+from helpers import register_user
 from app.services import text_service
 from app.services.llm_common import LLMError, normalize_analysis
 
@@ -13,8 +14,8 @@ OK = {"corrected_text": "Ok.", "score": 100, "feedback": "", "grammar_errors": [
 
 
 def _user(client):
-    body = client.post("/users/register", json={"email": f"q{uuid.uuid4().hex[:8]}@x.com", "password": "Abcdef12", "firstName": "A", "lastName": "B"}).json()
-    return uuid.UUID(body["user_id"]), {"Authorization": f"Bearer {body['access_token']}"}
+    headers, user_id = register_user(client)
+    return uuid.UUID(user_id), headers
 
 
 def _past_analyses(user_id, minutes_ago):

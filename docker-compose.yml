@@ -11,6 +11,8 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/linguatrack
       # Ollama tourne sur la machine hôte, pas dans le conteneur
       OLLAMA_URL: http://host.docker.internal:11434
+      # Service d'authentification lancé sur la machine hôte
+      AUTH_API_URL: http://host.docker.internal:8080
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

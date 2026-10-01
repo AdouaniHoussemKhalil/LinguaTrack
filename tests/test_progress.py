@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 from app.services.progress_service import auto_granularity, bucket_start, get_user_progress, next_bucket
+from helpers import register_user
 
 UTC = timezone.utc
 
@@ -24,8 +25,8 @@ def _seed(client):
     from app.core.database import SessionLocal
     from app.models.error import Error
     from app.models.text import TextSubmission
-    body = client.post("/users/register", json={"email": f"g{uuid.uuid4().hex[:8]}@x.com", "password": "Abcdef12", "firstName": "A", "lastName": "B"}).json()
-    uid = uuid.UUID(body["user_id"]); now = datetime.now(UTC)
+    h, user_id = register_user(client)
+    uid = uuid.UUID(user_id); now = datetime.now(UTC)
     db = SessionLocal()
     for days_ago, score, n_err in [(0, 90, 0), (0, 70, 2), (3, 60, 3), (20, None, 1)]:
         t = TextSubmission(id=uuid.uuid4(), user_id=uid, original_text="x", corrected_text="x", mode="correction",
@@ -33,7 +34,7 @@ def _seed(client):
         t.errors = [Error(id=uuid.uuid4(), error_type="accord", original_fragment="a", corrected_fragment="b") for _ in range(n_err)]
         db.add(t)
     db.commit(); db.close()
-    return uid, {"Authorization": f"Bearer {body['access_token']}"}
+    return uid, h
 
 def test_progress_week(client):
     _, h = _seed(client)
@@ -54,8 +55,7 @@ def test_progress_all_auto_and_null_score(client):
     assert old["average_score"] is None  # texte sans score : compté, mais pas dans la moyenne
 
 def test_progress_empty_and_auth(client):
-    body = client.post("/users/register", json={"email": f"e{uuid.uuid4().hex[:8]}@x.com", "password": "Abcdef12", "firstName": "A", "lastName": "B"}).json()
-    h = {"Authorization": f"Bearer {body['access_token']}"}
+    h, _ = register_user(client)
     assert client.get("/texts/progress", headers=h).json()["points"] == []
     assert len(client.get("/texts/progress", params={"period": "day"}, headers=h).json()["points"]) == 25
     assert client.get("/texts/progress").status_code == 401
