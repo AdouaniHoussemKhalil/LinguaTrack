@@ -1,12 +1,15 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.database import engine
 from app.core.migrations import run_migrations
-from app.routers import health, text_router, user_router
+from app.core.session import apply_session
+from app.routers import auth_router, health, text_router, user_router
+from app.services.auth_client import AuthServiceUnavailable
 
 
 # ------------------------------
@@ -48,11 +51,29 @@ app.add_middleware(
 )
 
 # ------------------------------
+# SESSION (cookies httpOnly) ET SERVICE D'AUTHENTIFICATION
+# ------------------------------
+@app.middleware("http")
+async def apply_session_cookies(request: Request, call_next):
+    """Pose ou efface les cookies de session décidés pendant la requête, y compris sur une erreur."""
+    response = await call_next(request)
+    apply_session(request, response)
+    return response
+
+
+@app.exception_handler(AuthServiceUnavailable)
+async def auth_service_unavailable(_request: Request, _exc: AuthServiceUnavailable):
+    message = "Service d'authentification indisponible, réessayez dans un instant"
+    return JSONResponse(status_code=503, content={"detail": message, "error": {"code": "authUnavailable", "message": message}})
+
+
+# ------------------------------
 # ROUTERS
 # ------------------------------
 # Import direct : une erreur dans un router doit empêcher le démarrage,
 # pas donner une API silencieusement incomplète.
 app.include_router(health.router)
+app.include_router(auth_router.router)
 app.include_router(text_router.router)
 app.include_router(user_router.router)
 

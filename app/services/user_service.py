@@ -1,78 +1,85 @@
-import uuid
-from uuid import UUID
+"""Comptes LinguaTrack : copie locale des comptes du service d'authentification.
 
+Le service d'auth gère identité, mot de passe, MFA et sessions ; la table `users` garde ce qui est
+propre à LinguaTrack (niveau, lien avec les textes) et une copie du nom et de l'e-mail.
+"""
+
+from fastapi import HTTPException, status
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from app.core.security import create_access_token, hash_password, verify_password
+
+from app.models.enums import LanguageLevel
 from app.models.user import User
-from app.schemas.user import PasswordChange, UserCreate, UserUpdate
-
-
-
-def create_user(db: Session, user_data: UserCreate):
-
-    existing_user = get_user_by_email(db, user_data.email)
-    if existing_user:
-        return (None, False, "Un utilisateur avec cet email existe déjà")
-
-    hashed_pwd = hash_password(user_data.password)
-
-    user = User(
-        id=uuid.uuid4(),
-        email=user_data.email,
-        password=hashed_pwd,
-        first_name=user_data.firstName,
-        last_name=user_data.lastName,
-        level=user_data.level.value
-    )
-
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-
-    created_user = User(
-        id=user.id,
-        email=user.email,
-        first_name=user.first_name,
-        last_name=user.last_name,
-        level=user.level,
-        created_at=user.created_at
-    )
-
-    return (created_user, True, None)
+from app.schemas.user import UserUpdate
 
 
 def get_user_by_email(db: Session, email: str):
-    return db.query(User).filter(User.email == email).first()
+    return db.query(User).filter(func.lower(User.email) == email.lower()).first()
 
 
-def get_user_by_id(db: Session, user_id: UUID):
-    return db.query(User).filter(User.id == user_id).first()
-
-def authenticate_user(db, email: str, password: str):
-    user = db.query(User).filter(User.email == email).first()
-
-    if not user:
-        return (None, False, "Nom d'utilisateur ou mot de passe incorrect")
-
-    if not verify_password(password, user.password):
-        return (None, False, "Nom d'utilisateur ou mot de passe incorrect")
-
-    return (user, True, None)
+def get_user_by_auth_id(db: Session, auth_user_id: str):
+    return db.query(User).filter(User.auth_user_id == auth_user_id).first()
 
 
-def login_user(db, email: str, password: str):
-    user = authenticate_user(db, email, password)
+def create_registered_user(db: Session, auth_user: dict, level: LanguageLevel) -> None:
+    """Crée le compte local dès l'inscription, pour mémoriser le niveau choisi.
 
-    if not user:
-        return None
+    Si l'e-mail appartient déjà à un compte LinguaTrack, rien n'est fait ici : la liaison se fait à la
+    première session, une fois l'adresse vérifiée (voir `sync_user`).
+    """
+    if get_user_by_auth_id(db, auth_user["id"]) or get_user_by_email(db, auth_user["email"]):
+        return
+    db.add(User(
+        auth_user_id=auth_user["id"],
+        email=auth_user["email"],
+        first_name=auth_user["firstName"],
+        last_name=auth_user["lastName"],
+        level=level.value,
+    ))
+    try:
+        db.commit()
+    except IntegrityError:  # requête concurrente : le compte existe déjà
+        db.rollback()
 
-    token = create_access_token({"sub": str(user.id)})
 
-    return token
+def sync_user(db: Session, profile: dict) -> User:
+    """Compte local de l'utilisateur authentifié (profil renvoyé par GET /me du service d'auth)."""
+    user = get_user_by_auth_id(db, profile["id"])
+    if user is None:
+        user = get_user_by_email(db, profile["email"])
+        if user is not None:
+            # Compte antérieur au service d'auth (ou compte d'auth recréé) : relié par l'e-mail,
+            # seulement si l'adresse est prouvée, sinon n'importe qui pourrait reprendre l'historique.
+            if not profile.get("isEmailVerified"):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Confirmez votre adresse e-mail pour retrouver votre compte LinguaTrack",
+                )
+            user.auth_user_id = profile["id"]
+        else:
+            user = User(auth_user_id=profile["id"], email=profile["email"], level=LanguageLevel.A2.value)
+            db.add(user)
+
+    changes = {"email": profile["email"], "first_name": profile["firstName"], "last_name": profile["lastName"]}
+    for attribute, value in changes.items():
+        if getattr(user, attribute) != value:
+            setattr(user, attribute, value)
+
+    if db.new or db.dirty:
+        try:
+            db.commit()
+        except IntegrityError:  # première requête simultanée : l'autre a créé le compte
+            db.rollback()
+            user = get_user_by_auth_id(db, profile["id"])
+            if user is None:
+                raise
+        db.refresh(user)
+    return user
 
 
 def update_user(db: Session, user: User, data: UserUpdate) -> User:
-    """Applique les champs fournis (prénom, nom, niveau) au profil."""
+    """Applique les champs fournis (prénom, nom, niveau) à la copie locale du profil."""
     if data.firstName is not None:
         user.first_name = data.firstName
     if data.lastName is not None:
@@ -82,14 +89,3 @@ def update_user(db: Session, user: User, data: UserUpdate) -> User:
     db.commit()
     db.refresh(user)
     return user
-
-
-def change_password(db: Session, user: User, data: PasswordChange):
-    """Change le mot de passe ; renvoie un message d'erreur, ou None en cas de succès."""
-    if not verify_password(data.current_password, user.password):
-        return "Mot de passe actuel incorrect"
-    if verify_password(data.new_password, user.password):
-        return "Le nouveau mot de passe doit être différent de l'actuel"
-    user.password = hash_password(data.new_password)
-    db.commit()
-    return None

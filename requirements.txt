@@ -7,20 +7,15 @@ SQLAlchemy==2.0.38
 alembic==1.20.0
 psycopg2-binary==2.9.11
 
-# Security / Auth
-passlib[bcrypt]==1.7.4
-python-jose[cryptography]==3.4.0
+# Config
 python-dotenv==1.0.1
 
 # Validation
 pydantic==2.11.7
 pydantic-settings==2.8.1
 email-validator>=2.0.0
-# HTTP (si appel API externe)
+# HTTP : service d'authentification (auth-web-app-api), Ollama
 httpx==0.28.1
-
-bcrypt==4.0.1
-python-multipart==0.0.9
 
 # LLM : version épinglée et testée (la 2.x ne s'installe pas sous Windows : chemins de fichiers trop longs)
 mistralai==1.12.4

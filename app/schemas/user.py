@@ -3,16 +3,8 @@ import re
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from uuid import UUID
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 from app.models.enums import LanguageLevel
-
-
-class UserCreate(BaseModel):
-    email: EmailStr
-    password: str
-    firstName: str
-    lastName: str
-    level: LanguageLevel = LanguageLevel.A2
 
 
 class UserResponse(BaseModel):
@@ -22,6 +14,8 @@ class UserResponse(BaseModel):
     lastName: str = Field(alias="last_name")
     level: Optional[LanguageLevel]
     created_at: datetime
+    # Lu dans le service d'authentification
+    mfa_enabled: bool = False
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -29,12 +23,13 @@ class UserResponse(BaseModel):
     )
 
 
-# Même politique que le front (features/auth/schemas/registerSchema.ts)
+# Politique du service d'authentification, reprise par le front (features/auth/schemas/registerSchema.ts)
 PASSWORD_RULES = (
     (lambda value: len(value) >= 8, "au moins 8 caractères"),
     (lambda value: re.search(r"[a-z]", value) is not None, "une lettre minuscule"),
     (lambda value: re.search(r"[A-Z]", value) is not None, "une lettre majuscule"),
     (lambda value: re.search(r"[0-9]", value) is not None, "un chiffre"),
+    (lambda value: re.search(r'[!@#$%^&*(),.?":{}|<>]', value) is not None, "un caractère spécial"),
 )
 
 
@@ -60,6 +55,8 @@ class UserUpdate(BaseModel):
         value = value.strip()
         if not value:
             raise ValueError("Ce champ ne peut pas être vide")
+        if len(value) < 3:  # minimum imposé par le service d'authentification
+            raise ValueError("3 caractères minimum")
         return value
 
 
@@ -73,11 +70,11 @@ class PasswordChange(BaseModel):
         return check_password_strength(value)
 
 
-class LoginRequest(BaseModel):
-    username: EmailStr
-    password: str
+class MfaRequest(BaseModel):
+    """Demande d'activation ou de désactivation de la MFA : un code est envoyé par e-mail."""
+
+    action: Literal["activate", "deactivate"]
 
 
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
+class MfaConfirm(MfaRequest):
+    code: str = Field(min_length=1, max_length=100)
