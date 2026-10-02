@@ -121,6 +121,24 @@ Après une modification de `requirements.txt` : `docker-compose up --build`.
 Le fichier [`.dockerignore`](.dockerignore) exclut `app/.env` et la base SQLite : les secrets ne sont
 jamais copiés dans l'image.
 
+L'image (`python:3.11-slim`) tourne avec un utilisateur sans privilèges, écoute le port `PORT` (8000 par défaut),
+lit les en-têtes du proxy (`--proxy-headers` : schéma HTTPS et IP du client derrière Render) et déclare une sonde de
+santé sur `/health/`.
+
+### Déploiement (Render)
+
+[`render.yaml`](render.yaml) décrit le service : image Docker construite depuis `main`, sonde `/health/`.
+
+1. **Base PostgreSQL** : créer une base (Neon ou Supabase, offres gratuites sans expiration) et copier son URL
+   (`postgresql://…?sslmode=require`). Les migrations Alembic s'appliquent au démarrage.
+2. **Service d'authentification** : dans le dashboard d'auth de **production**, créer l'application LinguaTrack
+   (URLs de vérification et de réinitialisation pointant vers le front déployé) et noter `x-app-id` / `x-app-secret`.
+3. Render → *New → Blueprint* → ce dépôt, puis saisir `DATABASE_URL`, `AUTH_API_URL`, `AUTH_APP_ID`,
+   `AUTH_APP_SECRET`, `MISTRAL_API_KEY` et `CORS_ORIGINS` (URL du front). `COOKIE_SECURE=true`,
+   `LLM_PROVIDERS=mistral` et `OLLAMA_MODEL` vide (pas d'Ollama sur Render) sont déjà fixés.
+4. Vérifier `https://<api>.onrender.com/health/`, puis déployer le front (voir son README) : il sert l'API sous sa
+   propre origine, condition pour que les cookies de session fonctionnent.
+
 ---
 
 ## Architecture

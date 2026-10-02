@@ -1,0 +1,35 @@
+# Blueprint Render : API LinguaTrack, construite depuis le Dockerfile de la branche main.
+# Les secrets (sync: false) se saisissent dans le dashboard Render, jamais dans ce fichier.
+services:
+  - type: web
+    name: linguatrack-api
+    runtime: docker
+    branch: main
+    plan: free
+    healthCheckPath: /health/
+    autoDeploy: true
+    envVars:
+      # PostgreSQL de production (Neon, Supabase…) : sans elle, SQLite serait effacée à chaque déploiement.
+      - key: DATABASE_URL
+        sync: false
+      # Service d'authentification en production, et identifiants de l'application LinguaTrack
+      # déclarée dans son dashboard de production.
+      - key: AUTH_API_URL
+        sync: false
+      - key: AUTH_APP_ID
+        sync: false
+      - key: AUTH_APP_SECRET
+        sync: false
+      # HTTPS en production : cookies de session envoyés en HTTPS seulement.
+      - key: COOKIE_SECURE
+        value: "true"
+      # Origine du front (même origine que l'API grâce aux réécritures du site statique).
+      - key: CORS_ORIGINS
+        sync: false
+      - key: MISTRAL_API_KEY
+        sync: false
+      # Pas d'Ollama sur Render : Mistral seul (ajouter ",claude" avec ANTHROPIC_API_KEY si besoin).
+      - key: LLM_PROVIDERS
+        value: mistral
+      - key: OLLAMA_MODEL
+        value: ""

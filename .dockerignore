@@ -7,3 +7,10 @@ app/.env
 venv
 __pycache__
 *.pyc
+
+# Inutile à l'exécution : tests, caches et CI
+tests
+.pytest_cache
+.github
+requirements-dev.txt
+pytest.ini
