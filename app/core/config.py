@@ -15,11 +15,14 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./linguatrack.db"
     SQL_ECHO: bool = False
 
-    # Obligatoire : l'API refuse de démarrer sans.
-    # Générer : python -c "import secrets; print(secrets.token_hex(32))"
-    SECRET_KEY: str = Field(min_length=1)
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    # Service d'authentification (auth-web-app-api) : identifiants de l'application déclarée
+    # dans son dashboard. Obligatoires ; le secret ne quitte jamais le serveur.
+    AUTH_API_URL: str = "http://localhost:8080"
+    AUTH_APP_ID: str = Field(min_length=1)
+    AUTH_APP_SECRET: str = Field(min_length=1)
+    AUTH_TIMEOUT: float = 30.0
+    # Cookies de session réservés à HTTPS (à activer en production)
+    COOKIE_SECURE: bool = False
 
     # Optionnelle au démarrage : vérifiée au moment de l'appel au LLM
     MISTRAL_API_KEY: Optional[str] = None
@@ -38,6 +41,10 @@ class Settings(BaseSettings):
     OLLAMA_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "deepseek-r1:1.5b"
     OLLAMA_TIMEOUT: float = 180.0
+
+    # Nombre maximal d'analyses par utilisateur (chaque analyse appelle un LLM) ; 0 = sans limite
+    ANALYSES_PER_HOUR: int = Field(default=30, ge=0)
+    ANALYSES_PER_DAY: int = Field(default=200, ge=0)
 
     # Origines autorisées par CORS, séparées par des virgules
     CORS_ORIGINS: str = "http://localhost:5173"
@@ -61,6 +68,3 @@ settings = Settings()
 DATABASE_URL = settings.DATABASE_URL
 MISTRAL_API_KEY = settings.MISTRAL_API_KEY
 ENV = settings.env
-SECRET_KEY = settings.SECRET_KEY
-ALGORITHM = settings.ALGORITHM
-ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES

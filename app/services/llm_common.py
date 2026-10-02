@@ -48,6 +48,41 @@ class LLMError(Exception):
     """Échec de l'analyse par le LLM ; le message est destiné à l'utilisateur (en français)."""
 
 
+# Ce que chaque mode demande au modèle d'écrire dans "corrected_text".
+# Quel que soit le mode, seules les vraies fautes sont listées et notées (voir build_prompts).
+MODE_INSTRUCTIONS = {
+    "correction": (
+        "Correction seule. Corrige uniquement les fautes de langue, sans rien reformuler : garde les mots, "
+        "le style, le registre et la structure de l'auteur. Une phrase correcte doit rester strictement identique. "
+        "Si le texte ne contient aucune faute, renvoie-le tel quel, sans erreur, avec la note 100."
+    ),
+    "professional": (
+        "Réécriture professionnelle. Après correction, réécris le texte dans un registre professionnel : "
+        "vouvoiement, ton courtois et soutenu, vocabulaire précis, sans familiarités ni abréviations "
+        "(« stp », « t'as »…). Garde le même message et la même longueur approximative."
+    ),
+    "simple": (
+        "Simplification. Après correction, réécris le texte pour qu'il soit facile à lire : phrases courtes "
+        "(une idée par phrase), mots courants à la place des mots rares ou soutenus, tournures directes. "
+        "Garde tout le sens du texte."
+    ),
+    "natural": (
+        "Formulation naturelle. Après correction, reformule ce qui sonne maladroit ou non idiomatique pour que "
+        "le texte se lise comme s'il avait été écrit par un francophone natif, en gardant le registre d'origine."
+    ),
+    "persuasive": (
+        "Réécriture persuasive. Après correction, rends le texte plus convaincant : mets en valeur les bénéfices, "
+        "enchaîne les idées avec des connecteurs logiques, termine par une phrase qui pousse à agir si c'est "
+        "pertinent. Reste crédible : pas d'exagération ni d'affirmation que le texte ne permet pas de faire."
+    ),
+}
+
+LEVEL_LABELS = {
+    "A1": "débutant", "A2": "élémentaire", "B1": "intermédiaire",
+    "B2": "intermédiaire avancé", "C1": "avancé", "C2": "maîtrise",
+}
+
+
 def build_prompts(text: str, mode: str, target_level: Optional[str]) -> Tuple[str, str]:
     """Prompt système et prompt utilisateur, identiques quel que soit le fournisseur."""
 
@@ -84,22 +119,38 @@ The field "severity" MUST ALWAYS be EXACTLY one of: low, medium, high.
 - high: serious mistake (meaning changed, wrong conjugation or agreement, gross spelling error)
 """
 
+    mode_instruction = MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS["correction"])
+    level = (
+        f"{target_level} ({LEVEL_LABELS[target_level]}) : adapte le vocabulaire des explications à ce niveau."
+        if target_level in LEVEL_LABELS
+        else "non précisé"
+    )
+
     user_prompt = f"""
 Analyse le texte suivant.
 
 Texte :
 {text}
 
-Mode :
-{mode}
+Mode — {mode_instruction}
 
-Niveau cible :
-{target_level or "non précisé"}
+Niveau de l'apprenant : {level}
 
 Consignes :
 
-- Corrige complètement le texte.
-- Donne une note entre 0 et 100.
+- "corrected_text" : le texte produit selon le mode ci-dessus.
+- "grammar_errors" : UNIQUEMENT les vraies fautes de langue du texte original (orthographe, grammaire,
+  conjugaison, accord, ponctuation…). Une reformulation, un choix de style ou un changement de registre
+  demandé par le mode n'est PAS une faute : ne le liste pas. Une tournure familière correcte n'est pas une faute.
+  Pas des fautes (à ne pas lister) : « super » → « excellent », « boulot » → « travail », « ok » → « d'accord »,
+  « on » → « nous ». De vraies fautes (à lister) : « si j'aurais » → « si j'avais », « les fleurs qu'il a cueilli »
+  → « les fleurs qu'il a cueillies », « bien qu'il est » → « bien qu'il soit ».
+- "original" : le passage fautif recopié exactement tel qu'il apparaît dans le texte ; "corrected" : sa correction.
+- "score" : note de 0 à 100 de la correction de la langue du texte original. 100 = aucune faute.
+  Les reformulations demandées par le mode ne font pas baisser la note.
+- "feedback" : deux ou trois phrases d'appréciation globale et un conseil pour progresser.
+- N'invente aucune information : pas de signature, pas de nom, pas de texte entre crochets à compléter,
+  pas de nouvelle idée ni de phrase de conclusion ajoutée (seul le mode persuasif peut ajouter un appel à l'action).
 - Toutes les explications doivent être écrites en français.
 - Tous les types d'erreurs doivent être écrits en français.
 - Chaque erreur doit appartenir à UNE SEULE catégorie de la liste imposée.
